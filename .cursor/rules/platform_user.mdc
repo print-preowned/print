@@ -1,0 +1,101 @@
+---
+alwaysApply: true
+---
+platform_user:
+  version: v1
+  status: canonical
+
+  principles:
+    - no_open_registration
+    - identity_created_only_on_acceptance
+    - authority_defined_by_admin
+    - invitee_defines_identity
+
+  entities:
+
+    PLATFORM_INVITE:
+      fields:
+        - id
+        - email
+        - privilege_set_id
+        - token_hash
+        - expires_at
+        - status: [pending, accepted, rejected, expired]
+        - invited_by
+        - created_at
+        - accepted_at
+
+    PLATFORM_USER:
+      fields:
+        - user_id
+        - privilege_set_id
+        - status: [active, suspended, revoked]
+        - created_at
+
+  invariants:
+    - id: MDC-PU-S-1
+      assertion: no_user_created_before_invite_acceptance
+
+    - id: MDC-PU-S-2
+      assertion: platform_access_requires_platform_user_row
+
+    - id: MDC-PU-S-3
+      assertion: invite_tokens_are_single_use_and_expiring
+
+    - id: MDC-PU-S-4
+      assertion: raw_invite_tokens_are_never_stored
+
+  flows:
+
+    bootstrap_super_admin:
+      behavior:
+        - seed_platform_user_with_status_NEW
+        - force_password_change_on_first_login
+
+    invite_creation:
+      by: PLATFORM_ADMIN
+      input:
+        - email
+        - privilege_set_id
+      behavior:
+        - generate_random_token
+        - store_hash_in_PLATFORM_INVITE
+        - send_raw_token_via_email
+        - status = pending
+
+    invite_validation:
+      input: raw_token
+      behavior:
+        - hash_token
+        - find_pending_invite_by_hash
+        - ensure_not_expired
+      on_fail:
+        - reject_with_invalid_or_expired
+
+    invite_acceptance:
+      requires:
+        - valid_invite
+        - password
+        - required_profile_fields
+      behavior:
+        - create_USER
+        - create_PLATFORM_USER
+        - mark_invite_accepted
+        - invalidate_token
+
+    invite_rejection:
+      behavior:
+        - mark_invite_rejected
+        - invalidate_token
+
+  prohibitions:
+    - creating_user_without_invite
+    - storing_raw_invite_token
+    - reusing_invite_token
+    - admin_setting_personal_user_profile_fields
+
+  final_rule:
+    statement: >
+      Platform users are created only by invitation.
+      Admin assigns authority; invitee supplies identity at acceptance.
+      No user record exists before invite acceptance.

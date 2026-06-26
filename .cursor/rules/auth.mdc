@@ -1,0 +1,178 @@
+---
+alwaysApply: true
+---
+mcp:
+  name: PRINT Authorization & Context Model
+  version: v1
+  status: canonical
+  audience:
+    - engineers
+    - autonomous_agents
+    - middleware
+
+invariants:
+  - id: single_identity
+    rule: >
+      A user has exactly one global identity.
+      Authentication always resolves to USER.
+  - id: single_context
+    rule: >
+      Every request executes in exactly one context:
+      CUSTOMER or BUSINESS(business_id).
+  - id: ownership_not_role
+    rule: >
+      Ownership is structural and must not be implemented as a role.
+  - id: no_db_in_middleware
+    rule: >
+      Authorization middleware must not query the database.
+  - id: token_is_authority
+    rule: >
+      Tokens must fully describe execution authority.
+      Missing authority implies denial.
+
+contexts:
+  CUSTOMER:
+    description: Public consumer context
+    implicit_permissions:
+      - READ_PUBLIC_RESOURCES
+      - CREATE_OWN_ORDER
+      - READ_OWN_ORDER
+      - CREATE_RATING_AFTER_PURCHASE
+    forbidden:
+      - BUSINESS_DATA_ACCESS
+      - ROLE_BASED_ACTIONS
+
+  BUSINESS:
+    description: Business execution context
+    requires:
+      - business_id
+      - role
+      - privileges
+    forbidden:
+      - MULTI_BUSINESS_EXECUTION
+
+context_transitions:
+  allowed:
+    - from: CUSTOMER
+      to: BUSINESS
+    - from: BUSINESS
+      to: CUSTOMER
+    - from: BUSINESS
+      to: BUSINESS
+  rules:
+    - Each transition issues a new access token
+    - Old token must be discarded
+    - No re-authentication required
+
+token:
+  type: access
+  base_fields:
+    required:
+      - iss
+      - aud
+      - sub
+      - iat
+      - exp
+      - jti
+      - ctx
+
+  customer_token:
+    ctx: CUSTOMER
+    allowed_fields:
+      - iss
+      - aud
+      - sub
+      - iat
+      - exp
+      - jti
+      - ctx
+    forbidden_fields:
+      - business
+      - privileges
+      - role
+
+  business_token:
+    ctx: BUSINESS
+    required_fields:
+      business:
+        id: string
+        role:
+          id: string
+          name: string
+          is_system: boolean
+        is_owner: boolean
+        privileges: array[string]
+
+forbidden_token_fields:
+  - user_email
+  - business_name
+  - multiple_businesses
+  - derived_permissions
+  - session_state
+
+authorization_algorithm:
+  business_token_issue:
+    steps:
+      - verify_user_exists
+      - verify_business_user_membership
+      - verify_role_scope_is_business
+      - verify_role_allowed_via_business_role
+      - resolve_privileges
+      - enforce_privilege_ceiling
+      - materialize_privileges
+      - set_owner_flag
+      - issue_token
+
+ownership:
+  rules:
+    - exactly_one_owner_per_business
+    - owner_must_be_business_user
+    - ownership_not_delegable
+  owner_capabilities:
+    - TRANSFER_OWNERSHIP
+    - DELETE_BUSINESS
+    - RECOVER_ACCESS
+    - OVERRIDE_ROLE_ASSIGNMENTS
+
+prohibited_patterns:
+  - infer_context_from_route
+  - check_database_in_middleware
+  - treat_admin_as_owner
+  - allow_multiple_contexts
+  - reuse_token_across_contexts
+  - store_permissions_in_session
+
+revocation:
+  triggers:
+    - role_changed
+    - privileges_changed
+    - user_removed_from_business
+    - ownership_transferred
+  strategy:
+    access_token_ttl_minutes: 60
+    revocation_key: jti
+
+tests:
+  required_scenarios:
+    - admin_in_business_a_staff_in_business_b
+    - context_switch_customer_to_business
+    - owner_self_removal_must_fail
+    - admin_owner_action_must_fail
+    - privilege_removed_mid_session
+    - cross_business_token_reuse
+
+enforcement:
+  rule: >
+    If authority is not explicitly present in the token,
+    it must be treated as denied.
+
+  evaluation_order:
+    - authenticate
+    - validate_token
+    - enforce_context
+    - enforce_privileges
+    - enforce_ownership
+    - enforce_entity_scope
+    - execute_controller
+
+  default_behavior: deny

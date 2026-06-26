@@ -1,0 +1,46 @@
+[project]
+name = "print-api"
+version = "0.1.0"
+description = "FastAPI backend for Print — a pre-owned book marketplace with multi-context JWT auth, privilege-based authorization, and platform administration."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "Print" }]
+keywords = ["fastapi", "marketplace", "books", "jwt", "mongodb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+dependencies = [
+    "boto3>=1.43",
+    "certifi>=2025.8",
+    "fastapi>=0.116",
+    "motor>=3.7",
+    "pwdlib>=0.2",
+    "pydantic>=2.11",
+    "PyJWT>=2.10",
+    "python-dotenv>=1.1",
+    "redis>=7.1",
+    "uvicorn[standard]>=0.35",
+]
+
+[project.urls]
+Documentation = "https://github.com/"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

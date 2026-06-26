@@ -1,0 +1,103 @@
+---
+alwaysApply: true
+---
+  mdc_author:
+  version: v1
+  status: canonical
+
+  concepts:
+    author:
+      scope: GLOBAL
+      represents: "Canonical real-world person or entity"
+      statuses: [canonical, provisional, merged, deprecated]
+
+  invariants:
+    - id: MDC-AUTHOR-1
+      assertion: authors_are_global_entities
+
+    - id: MDC-AUTHOR-2
+      assertion: businesses_do_not_own_authors
+
+    - id: MDC-AUTHOR-3
+      assertion: provisional_status_never_blocks_publishing
+
+    - id: MDC-AUTHOR-4
+      assertion: canonical_quality_is_enforced_asynchronously
+
+  data_model:
+    AUTHOR:
+      fields:
+        - id
+        - canonical_name
+        - normalized_name
+        - bio
+        - metadata
+        - status: [canonical, provisional, merged, deprecated]
+        - created_by_business_id: nullable
+        - created_at
+        - updated_at
+
+  lifecycle:
+
+    author_resolution:
+      by: BUSINESS
+      behavior:
+        - search_canonical_authors
+        - if_not_found_create_provisional_author
+      blocking: false
+
+  business_capabilities:
+    BUSINESS:
+      can:
+        - search_authors
+        - create_provisional_author
+      cannot:
+        - update_canonical_author
+        - merge_authors
+        - delete_global_authors
+
+  platform_capabilities:
+    PLATFORM:
+      can:
+        - promote_author_to_canonical
+        - merge_authors
+        - deprecate_authors
+        - correct_author_metadata
+      must:
+        - update_all_references_on_merge
+        - audit_all_author_mutations
+
+  merge_rules:
+    on_author_merge:
+      - update_all_book_author_links
+      - mark_source_author_as_merged
+
+  visibility:
+    CUSTOMER:
+      sees:
+        - authors_joined_through_business_books
+      rules:
+        - hide_deprecated_authors
+        - allow_provisional_authors_with_flag
+
+  moderation:
+    type: asynchronous
+    applies_to:
+      - authors
+    never_blocks:
+      - provisional_author_creation
+      - publishing
+
+  prohibited_patterns:
+    - business_mutating_canonical_author
+    - blocking_publish_on_author_approval
+    - deleting_authors_without_merge
+    - exposing_raw_author_table_to_customers
+
+  final_rule:
+    statement: >
+      Authors are global canonical entities with provisional creation for
+      fast onboarding. Businesses may create provisional authors
+      immediately and use them for publishing. Canonical quality is
+      enforced asynchronously by the platform and must never block
+      publishing.

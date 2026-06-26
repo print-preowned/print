@@ -1,0 +1,33 @@
+---
+alwaysApply: true
+---
+  ratings:
+    entity_scope: MIXED
+
+    endpoints:
+      POST /ratings:
+        context: CUSTOMER
+        action: CREATE_RATING
+        enforce:
+          - prior_purchase
+          - single_rating_per_order
+
+      GET /ratings:
+        context: CUSTOMER
+        action: READ_PUBLIC_RATING
+
+      GET /business/{businessId}/ratings:
+        context: BUSINESS
+        privilege: READ_RATING
+        enforce:
+          - business_id_match
+
+      PATCH /business/{businessId}/ratings/{ratingId}/moderate:
+        context: BUSINESS
+        privilege: MODERATE_RATING
+        enforce:
+          - business_id_match
+
+    invariants:
+      - id: MDC-BE-RATING-1
+        assertion: ratings_require_verified_purchase

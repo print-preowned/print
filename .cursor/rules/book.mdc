@@ -1,0 +1,137 @@
+---
+alwaysApply: true
+---
+mdc_book:
+  version: v1
+  status: canonical
+
+  concepts:
+    book:
+      scope: GLOBAL
+      represents: "Canonical real-world work"
+      statuses: [canonical, provisional, merged, deprecated]
+
+    business_book:
+      scope: BUSINESS
+      represents: "Business-specific listing of a book"
+
+  invariants:
+    - id: MDC-BOOK-1
+      assertion: books_are_global_entities
+
+    - id: MDC-BOOK-2
+      assertion: businesses_do_not_own_books
+
+    - id: MDC-BOOK-3
+      assertion: business_book_is_only_business_scoped_representation
+
+    - id: MDC-BOOK-4
+      assertion: provisional_status_never_blocks_publishing
+
+    - id: MDC-BOOK-5
+      assertion: canonical_quality_is_enforced_asynchronously
+
+  data_model:
+    BOOK:
+      fields:
+        - id
+        - title
+        - normalized_title
+        - isbn
+        - language
+        - publication_year
+        - metadata
+        - status: [canonical, provisional, merged, deprecated]
+        - created_at
+        - updated_at
+
+    BUSINESS_BOOK:
+      fields:
+        - id
+        - business_id
+        - book_id
+        - price
+        - stock
+        - condition
+        - sku
+        - visibility
+        - status
+        - created_at
+        - updated_at
+
+  lifecycle:
+
+    book_resolution:
+      by: BUSINESS
+      behavior:
+        - search_canonical_books
+        - if_not_found_create_provisional_book
+      blocking: false
+
+    business_book_creation:
+      by: BUSINESS
+      behavior:
+        - require_book_reference
+        - create_business_book_immediately
+        - allow_publish_immediately
+      blocking: false
+
+  business_capabilities:
+    BUSINESS:
+      can:
+        - search_books
+        - create_provisional_book
+        - create_business_book
+        - update_business_book_fields
+        - publish_business_book
+      cannot:
+        - update_canonical_book
+        - merge_books
+        - delete_global_books
+
+  platform_capabilities:
+    PLATFORM:
+      can:
+        - promote_book_to_canonical
+        - merge_books
+        - deprecate_books
+        - correct_book_metadata
+      must:
+        - update_all_business_book_references_on_merge
+        - audit_all_book_mutations
+
+  merge_rules:
+    on_book_merge:
+      - update_business_book.book_id
+      - mark_source_book_as_merged
+
+  visibility:
+    CUSTOMER:
+      sees:
+        - business_book_joined_with_book
+      rules:
+        - hide_deprecated_books
+        - allow_provisional_books_with_flag
+
+  moderation:
+    type: asynchronous
+    applies_to:
+      - books
+      - business_books
+    never_blocks:
+      - business_book_creation
+      - provisional_book_creation
+      - publishing
+
+  prohibited_patterns:
+    - business_mutating_canonical_book
+    - blocking_publish_on_book_approval
+    - deleting_books_without_merge
+    - exposing_raw_book_table_to_customers
+
+  final_rule:
+    statement: >
+      Books are global canonical works with provisional creation for fast
+      onboarding. Businesses publish through BUSINESS_BOOK and may create
+      and sell books immediately. Canonical quality is enforced
+      asynchronously by the platform and must never block publishing.

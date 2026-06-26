@@ -1,0 +1,182 @@
+---
+alwaysApply: true
+---
+mdc_client_context_switching:
+  version: v1
+  status: enforced
+
+  concepts:
+    context:
+      enum: [CUSTOMER, BUSINESS, PLATFORM]
+      PLATFORM:
+        description: >
+          System-level administrative context for managing the platform.
+          Not scoped to any business.
+        exclusivity:
+          - cannot_coexist_with: [CUSTOMER, BUSINESS]
+        entry_points:
+          - admin_app_login
+        forbidden_entry:
+          - customer_app
+          - business_app
+
+    authority_source:
+      type: access_token
+      invariant: token_is_sole_authority
+
+  invariants:
+    - id: MDC-CS-INV-1
+      type: invariant
+      assertion: token_replacement_is_atomic
+
+    - id: MDC-CS-INV-2
+      type: invariant
+      assertion: single_active_context_only
+
+    - id: MDC-CS-INV-3
+      type: prohibition
+      forbid:
+        - context_inference_from_route
+        - context_inference_from_state
+        - privilege_derivation_on_client
+
+  platform_invariants:
+    - id: MDC-PLATFORM-1
+      assertion: platform_context_is_explicit_only
+
+    - id: MDC-PLATFORM-2
+      assertion: platform_context_has_no_business_scope
+
+    - id: MDC-PLATFORM-3
+      assertion: platform_tokens_cannot_access_business_routes
+
+    - id: MDC-PLATFORM-4
+      assertion: business_tokens_cannot_access_platform_routes
+
+  api_contracts:
+    switch_to_business:
+      endpoint: POST /auth/context/business/{businessId}
+      input_token:
+        allowed_contexts: [CUSTOMER, BUSINESS]
+      output:
+        type: access_token
+        context: BUSINESS
+      backend_responsibilities:
+        - validate_membership
+        - resolve_role
+        - materialize_privileges
+        - issue_new_token
+
+    switch_to_customer:
+      endpoint: POST /auth/context/customer
+      input_token:
+        allowed_contexts: [BUSINESS]
+      output:
+        type: access_token
+        context: CUSTOMER
+      backend_responsibilities:
+        - issue_customer_token
+
+  client_algorithm:
+    steps:
+      - id: CS-STEP-1
+        action: pause_network_requests
+
+      - id: CS-STEP-2
+        action: call_context_switch_endpoint
+
+      - id: CS-STEP-3
+        action: replace_access_token
+        rules:
+          - discard_previous_token
+          - prohibit_token_merge
+
+      - id: CS-STEP-4
+        action: clear_client_caches
+        required:
+          - api_cache
+          - derived_state
+          - business_scoped_state
+
+      - id: CS-STEP-5
+        action: resume_network_requests
+
+      - id: CS-STEP-6
+        action: redirect_to_context_root
+
+  cache_rules:
+    - id: MDC-CS-CACHE-1
+      type: requirement
+      require:
+        - clear_all_caches_on_context_switch
+
+    - id: MDC-CS-CACHE-2
+      type: prohibition
+      forbid:
+        - reusing_cached_privileges
+        - persisting_business_state_across_contexts
+
+  routing_rules:
+    - id: MDC-CS-ROUTE-1
+      type: requirement
+      require:
+        - redirect_after_context_switch
+
+    - id: MDC-CS-ROUTE-2
+      type: invariant
+      assertion: route_guards_re_evaluated_after_switch
+
+    - id: MDC-CS-ROUTE-3
+      type: prohibition
+      forbid:
+        - deep_linking_across_contexts
+
+  error_handling:
+    forbidden_responses:
+      - status: 403
+        action: force_logout
+      - status: 401
+        action: force_logout
+
+    network_failure:
+      action: force_reauthentication
+      forbid:
+        - retaining_old_token
+
+  accessibility:
+    - id: MDC-CS-A11Y-1
+      type: requirement
+      require:
+        - announce_context_change
+
+    - id: MDC-CS-A11Y-2
+      type: requirement
+      require:
+        - reset_focus_after_switch
+
+  prohibited_patterns:
+    - reuse_token_across_contexts
+    - allow_multiple_business_contexts
+    - silent_context_fallback
+    - privilege_mutation_on_client
+    - business_ui_with_customer_token
+
+  tests:
+    must_pass:
+      - customer_to_business_token_replacement
+      - business_a_to_business_b_token_replacement
+      - cache_invalidated_on_switch
+      - ui_rehydrated_from_token
+      - route_guard_re_evaluated
+
+    must_fail:
+      - mixed_context_execution
+      - stale_privilege_usage
+      - inferred_context_switch
+
+  enforcement:
+    default: deny
+    rule: >
+      Any client behavior not explicitly permitted
+      by this context switching policy
+      must be treated as invalid.

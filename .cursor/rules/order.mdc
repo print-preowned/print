@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+---
+  orders:
+    entity_scope: MIXED
+
+    endpoints:
+      POST /orders:
+        context: CUSTOMER
+        action: CREATE_ORDER
+
+      GET /orders/{orderId}:
+        context: CUSTOMER
+        action: READ_OWN_ORDER
+        enforce:
+          - order_belongs_to_user
+
+      GET /business/{businessId}/orders:
+        context: BUSINESS
+        privilege: READ_ORDER
+        enforce:
+          - business_id_match
+
+      PATCH /business/{businessId}/orders/{orderId}/status:
+        context: BUSINESS
+        privilege: UPDATE_ORDER_STATUS
+        enforce:
+          - business_id_match
+          - order_belongs_to_business
+
+      POST /business/{businessId}/orders/{orderId}/refund:
+        context: BUSINESS
+        privilege: REFUND_ORDER
+        owner_only: true
+        enforce:
+          - business_id_match
+          - order_belongs_to_business
+
+    invariants:
+      - id: MDC-BE-ORDER-1
+        assertion: customers_access_only_own_orders
+
+      - id: MDC-BE-ORDER-2
+        assertion: refunds_are_owner_only

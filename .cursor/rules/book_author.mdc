@@ -1,0 +1,117 @@
+---
+alwaysApply: true
+---
+mdc_book_author:
+  version: v1
+  status: canonical
+
+  concepts:
+    book_author:
+      scope: GLOBAL
+      represents: "Link between global BOOK and global AUTHOR"
+
+  dependencies:
+    requires:
+      - MDC-BOOK
+      - MDC-AUTHOR
+
+  invariants:
+    - id: MDC-BA-1
+      assertion: linking_never_blocks_publishing
+
+    - id: MDC-BA-2
+      assertion: linking_allowed_for_any_status_combination
+      combinations:
+        - canonical_book + canonical_author
+        - canonical_book + provisional_author
+        - provisional_book + canonical_author
+        - provisional_book + provisional_author
+
+    - id: MDC-BA-3
+      assertion: business_cannot_mutate_canonical_links
+
+    - id: MDC-BA-4
+      assertion: merges_update_all_links
+
+  data_model:
+    BOOK_AUTHOR:
+      fields:
+        - book_id
+        - author_id
+        - created_by_business_id: nullable
+        - created_at
+        - status: [active, deprecated]
+
+  lifecycle:
+
+    linking:
+      by: BUSINESS
+      behavior:
+        - require_book_exists
+        - require_author_exists
+        - allow_any_status_combination
+        - create_link_immediately
+      blocking: false
+
+    restricted_linking:
+      when:
+        - book_or_author_locked_by_platform
+      behavior:
+        - allow_temporary_provisional_link
+        - optionally_create_link_request_for_canonical_target
+      blocking: false
+
+  business_capabilities:
+    BUSINESS:
+      can:
+        - link_book_and_author
+        - unlink_own_links_when_book_is_business_owned
+      cannot:
+        - modify_links_for_canonical_only_books
+        - modify_links_under_platform_lock
+
+  platform_capabilities:
+    PLATFORM:
+      can:
+        - create_links
+        - remove_links
+        - override_links
+        - lock_entities_from_linking
+      must:
+        - audit_all_link_mutations
+
+  merge_rules:
+    on_book_merge:
+      - update_book_author.book_id
+      - mark_old_links_as_deprecated_if_needed
+
+    on_author_merge:
+      - update_book_author.author_id
+      - mark_old_links_as_deprecated_if_needed
+
+  visibility:
+    CUSTOMER:
+      sees:
+        - authors_via_business_book_join
+      rules:
+        - hide_deprecated_links
+
+  moderation:
+    type: asynchronous
+    applies_to:
+      - links
+    never_blocks:
+      - linking
+      - publishing
+
+  prohibited_patterns:
+    - blocking_link_on_approval
+    - business_editing_platform_locked_links
+    - deleting_links_without_audit
+
+  final_rule:
+    statement: >
+      Book–author links are global, immediately creatable by businesses,
+      and may involve provisional or canonical entities. Linking never
+      blocks publishing. The platform may later reconcile links through
+      promotion, merge, or moderation without breaking business listings.

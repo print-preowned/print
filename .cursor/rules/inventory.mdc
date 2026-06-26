@@ -1,0 +1,41 @@
+---
+alwaysApply: true
+---
+  inventory:
+    entity_scope: BUSINESS_OWNED
+
+    endpoints:
+      GET /inventory:
+        context: CUSTOMER
+        action: READ_PUBLIC_INVENTORY
+
+      GET /business/{businessId}/inventory:
+        context: BUSINESS
+        privilege: READ_INVENTORY
+        enforce:
+          - business_id_match
+
+      POST /business/{businessId}/inventory:
+        context: BUSINESS
+        privilege: CREATE_INVENTORY_ITEM
+        enforce:
+          - business_id_match
+
+      PUT /business/{businessId}/inventory/{itemId}:
+        context: BUSINESS
+        privilege: UPDATE_INVENTORY_ITEM
+        enforce:
+          - business_id_match
+          - entity_belongs_to_business
+
+      DELETE /business/{businessId}/inventory/{itemId}:
+        context: BUSINESS
+        privilege: DELETE_INVENTORY_ITEM
+        owner_only: true
+        enforce:
+          - business_id_match
+          - entity_belongs_to_business
+
+    invariants:
+      - id: MDC-BE-INVENTORY-1
+        assertion: inventory_is_business_scoped
