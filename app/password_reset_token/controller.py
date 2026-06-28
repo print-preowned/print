@@ -4,6 +4,7 @@ from app.password_reset_token.model import (
     PasswordResetValidateResponse,
     PasswordResetCompleteRequest,
     PasswordChangeRequest,
+    PasswordChangeResponse,
 )
 from app.password_reset_token.service import (
     request_password_reset_service,
@@ -60,7 +61,7 @@ async def complete_password_reset(
 async def change_password(
     change_request: PasswordChangeRequest,
     token: TokenPayload = Depends(get_token_payload)
-) -> Response:
+) -> PasswordChangeResponse:
     """
     Change password (authenticated endpoint)
     

@@ -144,7 +144,7 @@ async def complete_password_reset_service(complete_request: PasswordResetComplet
     return Response(status_code=200)
 
 
-async def change_password_service(user_id: str, change_request: PasswordChangeRequest) -> Response:
+async def change_password_service(user_id: str, change_request: PasswordChangeRequest):
     """
     Change password (authenticated user)
     
@@ -152,6 +152,11 @@ async def change_password_service(user_id: str, change_request: PasswordChangeRe
     - Update to new password
     """
     from app.user.query import read_by_id_query
+    from app.user.model import User
+    from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
+    from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
+    from app.utility.token import create_platform_token
+    from app.password_reset_token.model import PasswordChangeResponse
     
     # Get user
     user = await read_by_id_query(user_id)
@@ -164,6 +169,8 @@ async def change_password_service(user_id: str, change_request: PasswordChangeRe
     if not is_valid:
         raise HTTPException(status_code=403, detail="Current password is incorrect")
     
+    was_new = user.status == "NEW"
+
     # Hash new password
     hashed_password = password_hash.hash(change_request.new_password)
     
@@ -172,8 +179,23 @@ async def change_password_service(user_id: str, change_request: PasswordChangeRe
     await update_query(user_id, update_data)
     
     # If user status is "NEW", update to "ACTIVE" (password change completed)
-    if user.status == "NEW":
-        update_data = UserUpdateRequest(status="ACTIVE")
-        await update_query(user_id, update_data)
-    
-    return Response(status_code=200)
+    if was_new:
+        await update_query(user_id, UserUpdateRequest(status="ACTIVE"))
+
+    new_token: str | None = None
+    if was_new:
+        platform_user = await read_platform_user_by_user_id_query(user_id)
+        if platform_user:
+            privilege_mappings = await read_by_privilege_set_id_query(
+                str(platform_user.platform_privilege_set_id)
+            )
+            privileges = [mapping.privilege_code for mapping in privilege_mappings]
+            updated_user = await read_by_id_query(user_id)
+            if updated_user:
+                new_token = create_platform_token(
+                    User.model_validate(updated_user),
+                    privileges,
+                    password_change_required=False,
+                )
+
+    return PasswordChangeResponse(token=new_token)

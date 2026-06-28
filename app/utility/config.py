@@ -25,6 +25,15 @@ class Settings:
     redis_password: str | None
     redis_db: int
     redis_ssl: bool
+    web_app_url: str
+    smtp_host: str | None
+    smtp_port: int
+    smtp_user: str | None
+    smtp_password: str | None
+    smtp_from: str
+    smtp_use_tls: bool
+    smtp_ssl_verify: bool
+    smtp_debug: bool
 
 
 @lru_cache
@@ -34,6 +43,13 @@ def get_settings() -> Settings:
     jwt_secret = os.environ.get("JWT_SECRET", jwt_default)
     if app_env == "production" and not jwt_secret:
         raise RuntimeError("JWT_SECRET is required when APP_ENV=production")
+
+    web_app_default = "http://localhost:3000" if app_env != "production" else ""
+    web_app_url = os.environ.get("WEB_APP_URL", web_app_default).rstrip("/")
+    if app_env == "production" and not web_app_url:
+        raise RuntimeError("WEB_APP_URL is required when APP_ENV=production")
+
+    smtp_from = os.environ.get("SMTP_FROM", "noreply@print.local")
 
     return Settings(
         app_env=app_env,
@@ -45,4 +61,13 @@ def get_settings() -> Settings:
         redis_password=os.environ.get("REDIS_PASSWORD"),
         redis_db=int(os.environ.get("REDIS_DB", "0")),
         redis_ssl=_env_bool("REDIS_SSL"),
+        web_app_url=web_app_url,
+        smtp_host=os.environ.get("SMTP_HOST"),
+        smtp_port=int(os.environ.get("SMTP_PORT", "587")),
+        smtp_user=os.environ.get("SMTP_USER"),
+        smtp_password=os.environ.get("SMTP_PASSWORD"),
+        smtp_from=smtp_from,
+        smtp_use_tls=_env_bool("SMTP_USE_TLS", True),
+        smtp_ssl_verify=_env_bool("SMTP_SSL_VERIFY", True),
+        smtp_debug=_env_bool("SMTP_DEBUG", False),
     )

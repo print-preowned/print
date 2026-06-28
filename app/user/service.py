@@ -63,7 +63,11 @@ async def login_service(request: Request, login_request: LoginRequest, isPlatfor
         privileges = [mapping.privilege_code for mapping in privilege_mappings]
         
         # Create platform token with privileges
-        token = create_platform_token(user, privileges)
+        token = create_platform_token(
+            user,
+            privileges,
+            password_change_required=(user.status == "NEW"),
+        )
     else:
         # Create CUSTOMER context token; include has_business so client can show "Switch to Business" without a round trip.
         # Owners and staff are both in business_user, so one check is enough.

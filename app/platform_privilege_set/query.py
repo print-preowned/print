@@ -60,3 +60,15 @@ async def read_by_id_query(id: str) -> PlatformPrivilegeSet | None:
     if not record:
         return None
     return PlatformPrivilegeSet.model_validate(record)
+
+
+async def read_by_ids_query(ids: list[str]) -> list[PlatformPrivilegeSet]:
+    """Return privilege sets for given ids (for batch population)."""
+    if not ids:
+        return []
+    oids = [ObjectId(i) for i in ids]
+    cursor = collection.find(
+        {"_id": {"$in": oids}, "status": {"$ne": "DELETED"}}
+    )
+    records = await cursor.to_list(length=len(oids))
+    return [PlatformPrivilegeSet.model_validate(record) for record in records]

@@ -104,7 +104,12 @@ def create_business_token(
     return jwt.encode(payload, get_settings().jwt_secret, algorithm=JWT_ALGORITHM)
 
 
-def create_platform_token(user: User, privileges: list[str]) -> str:
+def create_platform_token(
+    user: User,
+    privileges: list[str],
+    *,
+    password_change_required: bool = False,
+) -> str:
     """
     Create a PLATFORM context token
     
@@ -125,6 +130,8 @@ def create_platform_token(user: User, privileges: list[str]) -> str:
         "privileges": privileges,  # Materialized privileges for platform operations
         # Platform tokens must NOT include: business
     }
+    if password_change_required:
+        payload["pwd_chg"] = True
     
     return jwt.encode(payload, get_settings().jwt_secret, algorithm=JWT_ALGORITHM)
 

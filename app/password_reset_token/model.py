@@ -42,3 +42,8 @@ class PasswordResetCompleteRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class PasswordChangeResponse(BaseModel):
+    message: str = "Password changed successfully"
+    token: Optional[str] = None

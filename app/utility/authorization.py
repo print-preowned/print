@@ -29,6 +29,7 @@ class TokenPayload:
         self.ctx: TokenContext = cast(TokenContext, ctx_value)
         self.business = payload.get("business")  # Only for BUSINESS context
         self.privileges = payload.get("privileges", [])  # For BUSINESS and PLATFORM contexts
+        self.pwd_chg = payload.get("pwd_chg") is True
 
 
 def extract_token_from_request(request: Request) -> str:

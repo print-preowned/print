@@ -1,16 +1,36 @@
 from re import search
 from typing import Generic, List, Optional, Any, TypeVar
+from datetime import datetime, timezone
 from bson import ObjectId
 from pydantic import (
     BaseModel,
     ConfigDict,
     GetCoreSchemaHandler,
+    field_serializer,
+    field_validator,
 )
 from pydantic_core import core_schema
 
 T = TypeVar("T")
 
 class BaseAppModel(BaseModel):
+    """Base for MongoDB-backed entity models."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def ensure_utc(cls, v: Any) -> Any:
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
+
+    @field_serializer("*")
+    def serialize_object_ids(self, v: Any) -> Any:
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
     def __getitem__(self, key: str) -> Any:
         """Dynamically fetches any instance field by its string name."""
         try:

@@ -2,15 +2,19 @@ from fastapi import APIRouter, Depends, Response, Request
 from app.platform_invite.model import (
     PlatformInvite,
     PlatformInviteCreateRequest,
+    PlatformInviteResendRequest,
     PlatformInviteValidateResponse,
     PlatformInviteAcceptRequest,
     PlatformInviteRejectRequest,
+    PlatformInviteWithPrivilegeSet,
 )
 from app.platform_invite.service import (
     create_invite_service,
     validate_invite_service,
     accept_invite_service,
     reject_invite_service,
+    resend_invite_service,
+    revoke_invite_service,
     read_service,
     read_by_id_service,
 )
@@ -32,11 +36,33 @@ async def create(
     - Admin creates invite with email and privilege_set_id
     - System generates random token
     - Stores hash in PLATFORM_INVITE
-    - Returns raw token (should be sent via email)
+    - Returns invite metadata (token is sent via email only)
     - Requires PLATFORM context and MANAGE_PLATFORM_USERS privilege
     """
     user_id = token.sub
     return await create_invite_service(invite, user_id)
+
+
+@router.patch("/{id}/resend", status_code=200, tags=["platform"])
+async def resend(
+    id: str,
+    body: PlatformInviteResendRequest,
+    token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),
+) -> dict:
+    """
+    Resend a pending invite with a new token.
+    Optionally update privilege set and reset expiry from server default. Invalidates previous links.
+    """
+    return await resend_invite_service(id, body, token.sub)
+
+
+@router.post("/{id}/revoke", status_code=200, tags=["platform"])
+async def revoke(
+    id: str,
+    token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),
+) -> Response:
+    """Revoke a pending invite (admin). Invalidates the token without emailing the invitee."""
+    return await revoke_invite_service(id)
 
 
 @router.get("/validate", status_code=200, tags=["platform"])
@@ -90,7 +116,7 @@ async def reject(
 async def read(
     params: ParamRequest = Depends(),
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS"))
-) -> PaginatedResponse[PlatformInvite]:
+) -> PaginatedResponse[PlatformInviteWithPrivilegeSet]:
     """
     Read platform invites (paginated)
     Requires PLATFORM context and MANAGE_PLATFORM_USERS privilege

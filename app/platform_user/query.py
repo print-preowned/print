@@ -16,7 +16,7 @@ async def create_query(platform_user: PlatformUserCreateRequest):
     data["created_at"] = now
     data["status"] = "ACTIVE"
 
-    await collection.insert_one(data)
+    return await collection.insert_one(data)
 
 
 async def update_query(id: str, platform_user: PlatformUserUpdateRequest):

@@ -6,6 +6,7 @@ from ..utility.database import get_database
 from .model import PlatformInvite, PlatformInviteCreateRequest
 import math
 import hashlib
+import re
 
 db = get_database()
 collection = db["platform_invite"]
@@ -14,6 +15,44 @@ collection = db["platform_invite"]
 def hash_token(token: str) -> str:
     """Hash a token using SHA-256 (MDC-PU-S-4: raw_invite_tokens_are_never_stored)"""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+async def read_pending_by_email_query(email: str) -> PlatformInvite | None:
+    """Find a pending invite for an email (case-insensitive)."""
+    record = await collection.find_one(
+        {
+            "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
+            "status": "PENDING",
+        }
+    )
+    if not record:
+        return None
+    return PlatformInvite.model_validate(record)
+
+
+async def resend_pending_query(
+    id: str,
+    *,
+    token_hash: str,
+    platform_privilege_set_id: ObjectId,
+    expires_at: datetime,
+    updated_by: PyObjectId,
+) -> bool:
+    """Update a pending invite with a new token, privilege set, and expiry."""
+    result = await collection.update_one(
+        {"_id": ObjectId(id), "status": "PENDING"},
+        {
+            "$set": {
+                "token_hash": token_hash,
+                "platform_privilege_set_id": platform_privilege_set_id,
+                "expires_at": expires_at,
+                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "updated_by": updated_by,
+            }
+        },
+    )
+    return result.matched_count > 0
 
 
 async def create_query(invite: PlatformInviteCreateRequest, token_hash: str, invited_by: PyObjectId, expires_at: datetime) -> ObjectId:
@@ -37,10 +76,10 @@ async def read_query(params: ParamRequest) -> PaginatedData[PlatformInvite]:
     page = max(1, params.page)
     size = params.size
 
-    total_results = await collection.count_documents({"status": {"$ne": "expired"}})
+    total_results = await collection.count_documents({"status": {"$ne": "EXPIRED"}})
     total_pages = math.ceil(total_results / size) if size else 1
     cursor = (
-        collection.find({"status": {"$ne": "expired"}})
+        collection.find({"status": {"$ne": "EXPIRED"}})
         .skip((page - 1) * size)
         .limit(size)
     )

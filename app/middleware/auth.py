@@ -6,18 +6,21 @@ from fastapi import HTTPException
 from app.utility.authorization import get_token_payload
 
 
-PUBLIC_PATHS_PREFIX = (
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-)
-
 PUBLIC_EXACT_PATHS = (
     "/user/login",
     "/user/signup",
     "/platform-user/login",
     "/author/read",
     "/book/read",
+)
+
+PUBLIC_PATHS_PREFIX = (
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/platform-invite/validate",
+    "/platform-invite/accept",
+    "/platform-invite/reject",
 )
 
 
@@ -65,5 +68,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             print(f"========> 2: {str(e)}")
             return JSONResponse(status_code=401, content={"detail": f"Authentication failed: {str(e)}"})
+
+        token_payload = request.state.token_payload
+        if (
+            token_payload.ctx == "PLATFORM"
+            and token_payload.pwd_chg
+            and not path.startswith("/password-reset/change")
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Password change required before accessing platform resources"},
+            )
         
         return await call_next(request)
