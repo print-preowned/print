@@ -69,3 +69,17 @@ async def read_by_user_id_query(user_id: str) -> PlatformUser | None:
     if not record:
         return None
     return PlatformUser.model_validate(record)
+
+
+async def read_active_by_privilege_set_id_query(
+    privilege_set_id: str,
+) -> PlatformUser | None:
+    record = await collection.find_one(
+        {
+            "platform_privilege_set_id": ObjectId(privilege_set_id),
+            "status": "ACTIVE",
+        }
+    )
+    if not record:
+        return None
+    return PlatformUser.model_validate(record)

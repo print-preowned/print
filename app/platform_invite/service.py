@@ -26,6 +26,7 @@ from app.user.query import read_by_email_query, signup_query
 from app.platform_user.model import PlatformUserCreateRequest
 from app.platform_user.query import read_by_user_id_query
 from app.platform_user.service import create_service as create_platform_user_service
+from app.platform_user.guards import ensure_super_admin_not_invitable
 from app.platform_privilege_set.query import read_by_ids_query as read_privilege_sets_by_ids
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
 from app.utility.email import send_platform_invite_email
@@ -109,6 +110,8 @@ async def create_invite_service(
             detail=f"A pending invitation already exists for {invite.email}",
         )
 
+    await ensure_super_admin_not_invitable(str(invite.platform_privilege_set_id))
+
     expires_at = _invite_expires_at()
     raw_token, token_hash = _new_invite_token()
 
@@ -142,6 +145,8 @@ async def resend_invite_service(
     invite = await _require_pending_invite(invite_id)
 
     privilege_set_id = body.platform_privilege_set_id or invite.platform_privilege_set_id
+    await ensure_super_admin_not_invitable(str(privilege_set_id))
+
     expires_at = _invite_expires_at()
     raw_token, token_hash = _new_invite_token()
 

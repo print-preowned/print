@@ -32,14 +32,21 @@ async def delete_query(id: str):
     )
 
 
-async def read_query(params: ParamRequest) -> PaginatedData[PlatformPrivilegeSet]:
+async def read_query(
+    params: ParamRequest,
+    *,
+    exclude_names: list[str] | None = None,
+) -> PaginatedData[PlatformPrivilegeSet]:
     page = max(1, params.page)
     size = params.size
+    query_filter: dict = {"status": {"$ne": "DELETED"}}
+    if exclude_names:
+        query_filter["name"] = {"$nin": exclude_names}
 
-    total_results = await collection.count_documents({"status": {"$ne": "DELETED"}})
+    total_results = await collection.count_documents(query_filter)
     total_pages = math.ceil(total_results / size) if size else 1
     cursor = (
-        collection.find({"status": {"$ne": "DELETED"}})
+        collection.find(query_filter)
         .skip((page - 1) * size)
         .limit(size)
     )
@@ -72,3 +79,10 @@ async def read_by_ids_query(ids: list[str]) -> list[PlatformPrivilegeSet]:
     )
     records = await cursor.to_list(length=len(oids))
     return [PlatformPrivilegeSet.model_validate(record) for record in records]
+
+
+async def read_by_name_query(name: str) -> PlatformPrivilegeSet | None:
+    record = await collection.find_one({"name": name, "status": {"$ne": "DELETED"}})
+    if not record:
+        return None
+    return PlatformPrivilegeSet.model_validate(record)

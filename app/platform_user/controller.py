@@ -1,18 +1,25 @@
 from fastapi import APIRouter, Depends, Request, Response
-from app.platform_user.model import PlatformUser, PlatformUserCreateRequest, PlatformUserSignupRequest, PlatformUserUpdateRequest, PlatformUserWithUser
+from app.platform_user.model import (
+    PlatformUser,
+    PlatformUserCreateRequest,
+    PlatformUserUpdateRequest,
+    PlatformUserWithUser,
+    SuperAdminTransferRequest,
+)
 from app.platform_user.service import (
     create_service,
     login_service,
-    signup_service,
     update_service,
     delete_service,
     read_service,
     read_by_id_service,
     read_by_user_id_service,
+    read_me_service,
+    transfer_super_admin_service,
 )
 from app.user.model import LoginRequest, LoginResponse
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
-from app.utility.authorization import TokenPayload, require_privilege
+from app.utility.authorization import TokenPayload, require_context, require_privilege
 
 router = APIRouter(prefix="/platform-user", tags=["platform-user"])
 
@@ -36,6 +43,26 @@ async def create(
 @router.post("/login", status_code=200, tags=["platform"])
 async def login(request: Request, payload: LoginRequest) -> LoginResponse:
     return await login_service(request, payload)
+
+
+@router.get("/me", status_code=200, tags=["platform"])
+async def read_me(
+    token: TokenPayload = Depends(require_context("PLATFORM")),
+) -> BaseResponse[PlatformUserWithUser]:
+    """Read the signed-in platform user's record."""
+    return await read_me_service(token.sub)
+
+
+@router.post("/transfer-super-admin", status_code=200, tags=["platform"])
+async def transfer_super_admin(
+    body: SuperAdminTransferRequest,
+    token: TokenPayload = Depends(require_context("PLATFORM")),
+) -> Response:
+    """Transfer super admin role to another platform user. Caller must be the current super admin."""
+    return await transfer_super_admin_service(
+        token.sub,
+        str(body.target_platform_user_id),
+    )
 
 
 @router.put("/{id}", status_code=200, tags=["platform"])

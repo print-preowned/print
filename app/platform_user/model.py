@@ -31,8 +31,15 @@ class PlatformUserUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SuperAdminTransferRequest(BaseModel):
+    target_platform_user_id: PyObjectId
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PlatformUserWithUser(PlatformUser):
     """Platform user with populated user email and name for list/read."""
     user_email: Optional[str] = None
     user_name: Optional[str] = None
     platform_privilege_set_name: Optional[str] = None
+    is_super_admin: Optional[bool] = None

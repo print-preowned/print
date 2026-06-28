@@ -1,5 +1,10 @@
 from fastapi import HTTPException, Response
-from app.platform_privilege_set.model import PlatformPrivilegeSet, PlatformPrivilegeSetCreateRequest, PlatformPrivilegeSetUpdateRequest
+from app.platform_privilege_set.model import (
+    PlatformPrivilegeSet,
+    PlatformPrivilegeSetCreateRequest,
+    PlatformPrivilegeSetUpdateRequest,
+)
+from app.platform_user.guards import SUPER_ADMIN_SET_NAME
 from .query import (
     delete_query,
     read_query,
@@ -30,7 +35,10 @@ async def delete_service(id: str) -> Response:
 
 
 async def read_service(params: ParamRequest) -> PaginatedResponse[PlatformPrivilegeSet]:
-    platform_privilege_sets = await read_query(params)
+    platform_privilege_sets = await read_query(
+        params,
+        exclude_names=[SUPER_ADMIN_SET_NAME],
+    )
     return PaginatedResponse[PlatformPrivilegeSet](
         status_code=200,
         message="Successful",

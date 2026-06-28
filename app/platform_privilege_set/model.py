@@ -2,10 +2,10 @@ from datetime import datetime
 from typing import Optional
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from app.utility.model import BaseResponse, PyObjectId
+from app.utility.model import BaseAppModel, BaseResponse, PyObjectId
 
 
-class PlatformPrivilegeSet(BaseModel):
+class PlatformPrivilegeSet(BaseAppModel):
     id: PyObjectId = Field(alias="_id", serialization_alias="id")
     name: str
     status: str
