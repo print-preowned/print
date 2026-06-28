@@ -9,12 +9,22 @@ import certifi
 from app.utility.config import get_settings
 
 
+class EmailDeliveryError(Exception):
+    """Raised when an outbound email could not be delivered."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 def _smtp_ssl_context() -> ssl.SSLContext:
     """Use certifi CA bundle — default context often fails on macOS Python installs."""
     settings = get_settings()
     if not settings.smtp_ssl_verify:
         if settings.app_env != "development":
-            raise RuntimeError("SMTP_SSL_VERIFY=false is only allowed when APP_ENV=development")
+            raise EmailDeliveryError(
+                "SMTP_SSL_VERIFY=false is only allowed when APP_ENV=development"
+            )
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -36,7 +46,9 @@ def send_email(*, to: str, subject: str, html_body: str, text_body: str) -> None
         return
 
     if not settings.smtp_host:
-        raise RuntimeError("SMTP_HOST is required to send email when APP_ENV is not development")
+        raise EmailDeliveryError(
+            "SMTP is not configured. Set SMTP_HOST or use APP_ENV=development without SMTP_HOST."
+        )
 
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
@@ -45,13 +57,34 @@ def send_email(*, to: str, subject: str, html_body: str, text_body: str) -> None
     message.attach(MIMEText(text_body, "plain"))
     message.attach(MIMEText(html_body, "html"))
 
-    context = _smtp_ssl_context()
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-        if settings.smtp_use_tls:
-            server.starttls(context=context)
-        if settings.smtp_user and settings.smtp_password:
-            server.login(settings.smtp_user, settings.smtp_password)
-        server.sendmail(settings.smtp_from, [to], message.as_string())
+    try:
+        context = _smtp_ssl_context()
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as server:
+            if settings.smtp_use_tls:
+                server.starttls(context=context)
+            if settings.smtp_user and settings.smtp_password:
+                server.login(settings.smtp_user, settings.smtp_password)
+            server.sendmail(settings.smtp_from, [to], message.as_string())
+    except TimeoutError as exc:
+        raise EmailDeliveryError(
+            "Could not reach the mail server (timed out). Check SMTP_HOST and SMTP_PORT."
+        ) from exc
+    except ssl.SSLError as exc:
+        raise EmailDeliveryError(
+            "TLS/SSL error connecting to the mail server. Check SMTP_USE_TLS and SMTP_SSL_VERIFY."
+        ) from exc
+    except smtplib.SMTPAuthenticationError as exc:
+        raise EmailDeliveryError(
+            "Mail server rejected the SMTP credentials. Check SMTP_USER and SMTP_PASSWORD."
+        ) from exc
+    except smtplib.SMTPException as exc:
+        raise EmailDeliveryError(
+            f"Mail server rejected the message: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise EmailDeliveryError(
+            f"Could not connect to the mail server ({settings.smtp_host}:{settings.smtp_port})."
+        ) from exc
 
 
 def send_platform_invite_email(*, to: str, raw_token: str, expires_at_iso: str) -> None:

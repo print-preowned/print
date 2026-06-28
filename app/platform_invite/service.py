@@ -29,7 +29,7 @@ from app.platform_user.service import create_service as create_platform_user_ser
 from app.platform_user.guards import ensure_super_admin_not_invitable
 from app.platform_privilege_set.query import read_by_ids_query as read_privilege_sets_by_ids
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
-from app.utility.email import send_platform_invite_email
+from app.utility.email import EmailDeliveryError, send_platform_invite_email
 from pwdlib import PasswordHash
 import secrets
 
@@ -42,11 +42,14 @@ def generate_invite_token() -> str:
 
 
 def _email_invite(*, email: str, raw_token: str, expires_at: datetime) -> None:
-    send_platform_invite_email(
-        to=email,
-        raw_token=raw_token,
-        expires_at_iso=expires_at.isoformat(),
-    )
+    try:
+        send_platform_invite_email(
+            to=email,
+            raw_token=raw_token,
+            expires_at_iso=expires_at.isoformat(),
+        )
+    except EmailDeliveryError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
 
 
 def _new_invite_token() -> tuple[str, str]:
@@ -122,7 +125,11 @@ async def create_invite_service(
         expires_at
     )
 
-    _email_invite(email=invite.email, raw_token=raw_token, expires_at=expires_at)
+    try:
+        _email_invite(email=invite.email, raw_token=raw_token, expires_at=expires_at)
+    except HTTPException:
+        await update_status_query(str(invite_id), "REVOKED")
+        raise
 
     expires_at_iso = expires_at.isoformat()
 
@@ -163,7 +170,16 @@ async def resend_invite_service(
             detail="Invite is no longer pending and could not be resent",
         )
 
-    _email_invite(email=invite.email, raw_token=raw_token, expires_at=expires_at)
+    try:
+        _email_invite(email=invite.email, raw_token=raw_token, expires_at=expires_at)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=(
+                f"{exc.detail} The invite token was updated; use Resend again after "
+                "fixing mail delivery."
+            ),
+        ) from exc
 
     expires_at_iso = expires_at.isoformat()
     return {
