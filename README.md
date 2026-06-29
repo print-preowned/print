@@ -19,7 +19,7 @@ Companion web app: [print-web](https://github.com/) (Next.js).
 - [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn
 - MongoDB (Motor async driver)
 - Redis (token revocation)
-- AWS S3 (image storage)
+- AWS S3 (image storage) with CloudFront CDN for public reads
 - PyJWT
 
 ## Project layout
@@ -70,6 +70,7 @@ cp .env.example .env
 | `REDIS_PORT` | Redis port |
 | `REDIS_PASSWORD` | Redis password (if required) |
 | `REDIS_SSL` | `true` for TLS endpoints (e.g. Redis Cloud) |
+| `ASSETS_CDN_URL` | CDN base URL for public images (e.g. CloudFront distribution) |
 
 In production, `JWT_SECRET` is required when `APP_ENV=production`.
 

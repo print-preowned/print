@@ -34,6 +34,7 @@ class Settings:
     smtp_use_tls: bool
     smtp_ssl_verify: bool
     smtp_debug: bool
+    assets_cdn_url: str | None
 
 
 @lru_cache
@@ -70,4 +71,5 @@ def get_settings() -> Settings:
         smtp_use_tls=_env_bool("SMTP_USE_TLS", True),
         smtp_ssl_verify=_env_bool("SMTP_SSL_VERIFY", True),
         smtp_debug=_env_bool("SMTP_DEBUG", False),
+        assets_cdn_url=os.environ.get("ASSETS_CDN_URL"),
     )

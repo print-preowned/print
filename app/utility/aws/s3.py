@@ -7,6 +7,8 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
+from app.utility.config import get_settings
+
 # Configure an S3 lifecycle rule on prefix "staging/" to expire uncommitted uploads.
 AWS_REGION = "us-east-1"
 AWS_BUCKET_NAME = "print-preowned"
@@ -53,8 +55,18 @@ def content_type_for_file_type(file_type: str) -> str:
     return FILE_TYPE_CONTENT_TYPES[validate_file_type(file_type)]
 
 
+def _assets_cdn_base() -> str | None:
+    return get_settings().assets_cdn_url
+
+
 def create_object_url(object_name: str) -> str:
-    return f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{object_name}"
+    cdn_base = _assets_cdn_base()
+    if not cdn_base:
+        raise HTTPException(
+            status_code=500,
+            detail="ASSETS_CDN_URL is not configured",
+        )
+    return f"{cdn_base}/{object_name}"
 
 
 def staging_object_key(file_type: str) -> str:
@@ -156,10 +168,15 @@ def delete_object_if_exists(object_key: str) -> None:
 
 
 def object_key_from_url(image_url: str) -> str | None:
-    prefix = f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/"
-    if not image_url.startswith(prefix):
-        return None
-    return image_url[len(prefix) :]
+    s3_prefix = f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/"
+    if image_url.startswith(s3_prefix):
+        return image_url[len(s3_prefix) :]
+
+    cdn_base = _assets_cdn_base()
+    if cdn_base and image_url.startswith(f"{cdn_base}/"):
+        return image_url[len(cdn_base) + 1 :]
+
+    return None
 
 
 def delete_replaced_book_cover(old_image_url: str, new_image_url: str, book_id: str) -> None:
