@@ -2,14 +2,16 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, Response
 from app.business_book.model import (
     BusinessBook,
+    BusinessBookWithVariants,
+    BusinessBookWithVariantSummary,
     BusinessBookCreateRequest,
     BusinessBookUpdateRequest,
-    BusinessBookWithBook,
 )
 from .query import (
     delete_query,
     read_query,
     read_by_id_query,
+    read_by_id_with_variants_query,
     read_by_business_id_query,
     create_query,
     update_query,
@@ -66,9 +68,9 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[BusinessBook]:
 
 async def read_by_business_id_service(
     business_id: str, params: ParamRequest
-) -> PaginatedResponse[BusinessBookWithBook]:
+) -> PaginatedResponse[BusinessBookWithVariantSummary]:
     result = await read_by_business_id_query(business_id, params)
-    return PaginatedResponse[BusinessBookWithBook](
+    return PaginatedResponse[BusinessBookWithVariantSummary](
         status_code=200,
         message="Successful",
         data=result.data,
@@ -76,12 +78,16 @@ async def read_by_business_id_service(
     )
 
 
-async def read_by_id_service(id: str, business_id: str | None = None) -> BaseResponse[BusinessBook]:
-    item = await read_by_id_query(id)
+async def read_by_id_service(
+    id: str, business_id: str | None = None
+) -> BaseResponse[BusinessBookWithVariants]:
+    item = await read_by_id_with_variants_query(id)
     if item is None:
         raise HTTPException(status_code=404, detail="BusinessBook not found")
     if business_id and str(item.business_id) != business_id:
         raise HTTPException(status_code=403, detail="Not your business listing")
-    return BaseResponse[BusinessBook](status_code=200, message="Successful", data=item)
+    return BaseResponse[BusinessBookWithVariants](
+        status_code=200, message="Successful", data=item
+    )
 
 

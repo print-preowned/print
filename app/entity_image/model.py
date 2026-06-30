@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from app.utility.model import PyObjectId
 
 
-EntityName = Literal["BUSINESS_RATING", "INVENTORY_ITEM", "BUSINESS_BOOK"]
+EntityName = Literal["BUSINESS_RATING", "VARIANT", "BUSINESS_BOOK"]
 
 
 class EntityImage(BaseModel):

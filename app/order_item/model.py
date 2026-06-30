@@ -2,13 +2,13 @@ from datetime import datetime
 from typing import Optional
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from app.utility.model import PyObjectId
+from app.utility.model import BaseAppModel, PyObjectId
 
 
-class OrderItem(BaseModel):
+class OrderItem(BaseAppModel):
     id: PyObjectId = Field(alias="_id", serialization_alias="id")
     order_id: PyObjectId
-    inventory_item_id: PyObjectId
+    variant_id: PyObjectId
     quantity: int
     unit_price: float
     currency: str
@@ -17,24 +17,12 @@ class OrderItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_serializer("id")
-    def serialize_id(self, v: ObjectId, _info):
-        return str(v)
-
-    @field_serializer("order_id")
-    def serialize_order_id(self, v: ObjectId, _info):
-        return str(v)
-
-    @field_serializer("inventory_item_id")
-    def serialize_inventory_item_id(self, v: ObjectId, _info):
-        return str(v)
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class OrderItemCreateRequest(BaseModel):
     order_id: PyObjectId
-    inventory_item_id: PyObjectId
+    variant_id: PyObjectId
     quantity: int
     unit_price: float
     currency: str
@@ -44,7 +32,7 @@ class OrderItemCreateRequest(BaseModel):
 
 class OrderItemUpdateRequest(BaseModel):
     order_id: Optional[PyObjectId] = None
-    inventory_item_id: Optional[PyObjectId] = None
+    variant_id: Optional[PyObjectId] = None
     quantity: Optional[int] = None
     unit_price: Optional[float] = None
     currency: Optional[str] = None
@@ -52,5 +40,3 @@ class OrderItemUpdateRequest(BaseModel):
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
-
-

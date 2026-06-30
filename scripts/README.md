@@ -13,9 +13,9 @@ Seeds default records for the application:
    - Creates standard CRUD privileges for all modules:
      - BOOK, AUTHOR, GENRE, BOOK_GENRE, BOOK_AUTHOR, BOOK_RATING
      - BUSINESS, BUSINESS_BOOK, BUSINESS_USER, BUSINESS_RATING
-     - INVENTORY_ITEM, ORDER, ORDER_ITEM, RATING
+     - VARIANT, ORDER, ORDER_ITEM, RATING
      - USER, ROLE, PRIVILEGE, ROLE_PRIVILEGE
-     - VARIANT_TYPE, VARIANT_OPTION, ITEM_ATTRIBUTE, ENTITY_IMAGE
+     - VARIANT_TYPE, VARIANT_OPTION, VARIANT_CONFIG, ENTITY_IMAGE
    - Note: AUTHOR module does not have DELETE privilege (authors cannot be deleted per MDC-AUTHOR-2)
 
 3. **Role-Privilege Mappings**

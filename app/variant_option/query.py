@@ -62,3 +62,24 @@ async def read_by_id_query(id: str) -> VariantOption | None:
     return VariantOption.model_validate(record)
 
 
+async def read_by_variant_type_query(
+    variant_type_id: str, params: ParamRequest
+) -> PaginatedData[VariantOption]:
+    page = max(1, params.page)
+    size = params.size
+    filt = {
+        "variant_type_id": ObjectId(variant_type_id),
+        "status": {"$ne": "DELETED"},
+    }
+    total_results = await collection.count_documents(filt)
+    total_pages = math.ceil(total_results / size) if size else 1
+    cursor = collection.find(filt).skip((page - 1) * size).limit(size)
+    records = await cursor.to_list(length=size)
+    return PaginatedData(
+        data=[VariantOption.model_validate(record) for record in records],
+        pagination=Pagination(
+            page=page, size=size, total_pages=total_pages, total_results=total_results
+        ),
+    )
+
+

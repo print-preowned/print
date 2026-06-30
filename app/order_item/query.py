@@ -6,7 +6,7 @@ from .model import OrderItem, OrderItemCreateRequest, OrderItemUpdateRequest
 import math
 
 db = get_database()
-collection = db["order_items"]
+collection = db["order_item"]
 
 
 async def create_query(item: OrderItemCreateRequest):

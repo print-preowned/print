@@ -22,12 +22,12 @@ from .business import controller as businessController
 from .business_book import controller as businessBookController
 from .business_user import controller as businessUserController
 from .business_rating import controller as businessRatingController
-from .inventory_item import controller as inventoryItemController
+from .variant import controller as variantController
 from .order import controller as orderController
 from .order_item import controller as orderItemController
 from .variant_type import controller as variantTypeController
 from .variant_option import controller as variantOptionController
-from .item_attribute import controller as itemAttributeController
+from .variant_config import controller as variantConfigController
 from .entity_image import controller as entityImageController
 from fastapi import Depends, FastAPI, HTTPException, Request
 from app.module import controller as moduleController
@@ -144,12 +144,13 @@ app.include_router(businessController.router)
 app.include_router(businessBookController.router)
 app.include_router(businessUserController.router)
 app.include_router(businessRatingController.router)
-app.include_router(inventoryItemController.router)
+app.include_router(variantController.router)
+app.include_router(variantController.catalog_router)
 app.include_router(orderController.router)
 app.include_router(orderItemController.router)
 app.include_router(variantTypeController.router)
 app.include_router(variantOptionController.router)
-app.include_router(itemAttributeController.router)
+app.include_router(variantConfigController.router)
 app.include_router(entityImageController.router)
 app.include_router(moduleController.router)
 app.include_router(platformPrivilegeSetController.router)

@@ -34,6 +34,13 @@ from app.platform_privilege_set_privilege.query import create_query as create_pl
 from app.utility.model import PyObjectId
 
 
+# Default variant vocabulary for pre-owned books
+VARIANT_TYPES = {
+    "Condition": ["New", "Like New", "Very Good", "Good", "Acceptable"],
+    "Format": ["Hardcover", "Paperback", "Mass Market", "Other"],
+}
+
+
 # Define all modules that need privileges
 # Based on the directory structure and authorization rules
 MODULES = [
@@ -47,7 +54,7 @@ MODULES = [
     "BUSINESS_BOOK",
     "BUSINESS_USER",
     "BUSINESS_RATING",
-    "INVENTORY_ITEM",
+    "VARIANT",
     "ORDER",
     "ORDER_ITEM",
     "RATING",
@@ -57,7 +64,7 @@ MODULES = [
     "ROLE_PRIVILEGE",
     "VARIANT_TYPE",
     "VARIANT_OPTION",
-    "ITEM_ATTRIBUTE",
+    "VARIANT_CONFIG",
     "ENTITY_IMAGE",
 ]
 
@@ -302,6 +309,68 @@ async def create_platform_privilege_sets():
     return created_sets, created_mappings
 
 
+async def seed_variant_vocabulary():
+    """Seed default Condition and Format variant types and options."""
+    from app.utility.database import get_database
+    from datetime import datetime, timezone
+
+    print("\nSeeding variant vocabulary...")
+    db = get_database()
+    type_collection = db["variant_type"]
+    option_collection = db["variant_option"]
+    now = datetime.now(timezone.utc)
+    created_types = 0
+    created_options = 0
+
+    for type_name, options in VARIANT_TYPES.items():
+        existing_type = await type_collection.find_one(
+            {"name": type_name, "status": {"$ne": "DELETED"}}
+        )
+        if existing_type:
+            type_id = existing_type["_id"]
+            print(f"  - Variant type '{type_name}' already exists")
+        else:
+            result = await type_collection.insert_one(
+                {
+                    "name": type_name,
+                    "status": "ACTIVE",
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+            type_id = result.inserted_id
+            created_types += 1
+            print(f"  ✓ Created variant type: {type_name}")
+
+        for value in options:
+            existing_option = await option_collection.find_one(
+                {
+                    "variant_type_id": type_id,
+                    "value": value,
+                    "status": {"$ne": "DELETED"},
+                }
+            )
+            if existing_option:
+                print(f"    - Option '{value}' already exists")
+            else:
+                await option_collection.insert_one(
+                    {
+                        "variant_type_id": type_id,
+                        "value": value,
+                        "status": "ACTIVE",
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                )
+                created_options += 1
+                print(f"    ✓ Created option: {value}")
+
+    print(
+        f"  Summary: Created {created_types} variant types, {created_options} options"
+    )
+    return created_types, created_options
+
+
 async def main():
     """Main function to seed all default records"""
     print("=" * 60)
@@ -320,6 +389,9 @@ async def main():
         
         # 4. Create platform privilege sets and mappings
         await create_platform_privilege_sets()
+
+        # 5. Seed variant vocabulary (Condition, Format)
+        await seed_variant_vocabulary()
         
         print("\n" + "=" * 60)
         print("✓ Seeding completed successfully!")

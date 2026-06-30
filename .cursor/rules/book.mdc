@@ -50,14 +50,29 @@ mdc_book:
         - id
         - business_id
         - book_id
-        - price
-        - stock
-        - condition
-        - sku
-        - visibility
+        - synopsis
+        - image
         - status
         - created_at
         - updated_at
+
+    VARIANT:
+      scope: BUSINESS
+      represents: "Sellable SKU with price, stock, and option config"
+      fields:
+        - id
+        - business_book_id
+        - price
+        - stock
+        - currency
+        - discount
+        - sku
+        - image
+        - status
+        - created_at
+        - updated_at
+      linked_via:
+        - variant_config → variant_option
 
   lifecycle:
 

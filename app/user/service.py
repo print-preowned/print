@@ -212,7 +212,7 @@ async def switch_context_service(
                 "READ_USER", "CREATE_USER", "UPDATE_USER", "DELETE_USER",
                 "READ_BOOK", "CREATE_BOOK", "UPDATE_BOOK", "DELETE_BOOK",
                 "READ_AUTHOR", "CREATE_AUTHOR", "UPDATE_AUTHOR",
-                "READ_INVENTORY", "CREATE_INVENTORY_ITEM", "UPDATE_INVENTORY_ITEM", "DELETE_INVENTORY_ITEM",
+                "READ_INVENTORY", "CREATE_VARIANT", "UPDATE_VARIANT", "DELETE_VARIANT",
                 "READ_ORDER", "UPDATE_ORDER_STATUS", "REFUND_ORDER",
                 "READ_RATING", "UPDATE_RATING",
             ]

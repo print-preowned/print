@@ -4,7 +4,14 @@ from app.variant_option.model import (
     VariantOptionCreateRequest,
     VariantOptionUpdateRequest,
 )
-from .query import delete_query, read_query, read_by_id_query, create_query, update_query
+from .query import (
+    delete_query,
+    read_query,
+    read_by_id_query,
+    read_by_variant_type_query,
+    create_query,
+    update_query,
+)
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 
@@ -29,6 +36,18 @@ async def delete_service(id: str) -> Response:
 
 async def read_service(params: ParamRequest) -> PaginatedResponse[VariantOption]:
     items = await read_query(params)
+    return PaginatedResponse[VariantOption](
+        status_code=200,
+        message="Successful",
+        data=items.data,
+        pagination=items.pagination,
+    )
+
+
+async def read_by_variant_type_service(
+    variant_type_id: str, params: ParamRequest
+) -> PaginatedResponse[VariantOption]:
+    items = await read_by_variant_type_query(variant_type_id, params)
     return PaginatedResponse[VariantOption](
         status_code=200,
         message="Successful",

@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from app.variant.model import VariantWithConfig
 from app.utility.model import PyObjectId
 
 
@@ -52,5 +53,19 @@ class BusinessBookWithBook(BusinessBook):
     """Business book with book title (and image) for list display."""
     book_title: Optional[str] = None
     book_image: Optional[str] = None
+
+
+class BusinessBookWithVariantSummary(BusinessBookWithBook):
+    """Catalog listing with aggregated variant metrics."""
+    variant_count: int = 0
+    min_price: Optional[float] = None
+    total_stock: int = 0
+
+
+class BusinessBookWithVariants(BusinessBook):
+    """Single listing with full variants and resolved config."""
+    book_title: Optional[str] = None
+    book_image: Optional[str] = None
+    variants: list[VariantWithConfig] = []
 
 

@@ -17,20 +17,20 @@ alwaysApply: true
 
       POST /business/{businessId}/inventory:
         context: BUSINESS
-        privilege: CREATE_INVENTORY_ITEM
+        privilege: CREATE_VARIANT
         enforce:
           - business_id_match
 
       PUT /business/{businessId}/inventory/{itemId}:
         context: BUSINESS
-        privilege: UPDATE_INVENTORY_ITEM
+        privilege: UPDATE_VARIANT
         enforce:
           - business_id_match
           - entity_belongs_to_business
 
       DELETE /business/{businessId}/inventory/{itemId}:
         context: BUSINESS
-        privilege: DELETE_INVENTORY_ITEM
+        privilege: DELETE_VARIANT
         owner_only: true
         enforce:
           - business_id_match

@@ -1,7 +1,7 @@
-from app.item_attribute.model import (
-    ItemAttribute,
-    ItemAttributeCreateRequest,
-    ItemAttributeUpdateRequest,
+from app.variant_config.model import (
+    VariantConfig,
+    VariantConfigCreateRequest,
+    VariantConfigUpdateRequest,
 )
 from .service import (
     delete_service,
@@ -13,16 +13,16 @@ from .service import (
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from fastapi import APIRouter, Response
 
-router = APIRouter(prefix="/item-attribute", tags=["ItemAttributeController"])
+router = APIRouter(prefix="/variant-config", tags=["VariantConfigController"])
 
 
 @router.post("/create")
-async def create(payload: ItemAttributeCreateRequest) -> Response:
+async def create(payload: VariantConfigCreateRequest) -> Response:
     return await create_service(payload)
 
 
 @router.put("/update/{id}")
-async def update(id: str, payload: ItemAttributeUpdateRequest) -> Response:
+async def update(id: str, payload: VariantConfigUpdateRequest) -> Response:
     return await update_service(id, payload)
 
 
@@ -34,13 +34,11 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[ItemAttribute]:
+) -> PaginatedResponse[VariantConfig]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[ItemAttribute]:
+async def read_by_id(id: str) -> BaseResponse[VariantConfig]:
     return await read_by_id_service(id)
-
-
