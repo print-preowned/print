@@ -6,7 +6,6 @@ from ..utility.database import get_database
 from .model import (
     Variant,
     VariantCreateRequest,
-    VariantCreateWithConfigRequest,
     VariantUpdateRequest,
     VariantWithConfig,
     PublicCatalogVariant,
@@ -22,17 +21,6 @@ variant_type_collection = db["variant_type"]
 business_book_collection = db["business_book"]
 book_collection = db["book"]
 business_collection = db["business"]
-
-
-async def create_query(item: VariantCreateRequest):
-    data = item.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    if "status" not in data or not data["status"]:
-        data["status"] = "ACTIVE"
-
-    await collection.insert_one(data)
 
 
 async def update_query(id: str, item: VariantUpdateRequest):
@@ -256,8 +244,8 @@ async def _duplicate_config_set_exists(
     return False
 
 
-async def create_with_config_query(
-    business_book_id: str, payload: VariantCreateWithConfigRequest
+async def create_query(
+    business_book_id: str, payload: VariantCreateRequest
 ) -> str:
     bb_oid = PyObjectId(business_book_id)
     option_ids = list(payload.variant_option_ids)

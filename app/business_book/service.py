@@ -6,6 +6,8 @@ from app.business_book.model import (
     BusinessBookWithVariantSummary,
     BusinessBookCreateRequest,
     BusinessBookUpdateRequest,
+    SELLER_MUTABLE_LISTING_STATUSES,
+    SELLER_LISTING_STATUS_TRANSITIONS,
 )
 from .query import (
     delete_query,
@@ -16,19 +18,13 @@ from .query import (
     create_query,
     update_query,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
 
 
 async def create_service(item: BusinessBookCreateRequest, business_id: str) -> Response:
-    # Enforce business_id from token (MDC-BOOK-3: business_book is business-scoped)
-    from bson import ObjectId
-    data = item.model_dump()
-    data["business_id"] = ObjectId(business_id)
-    data["created_at"] = data["updated_at"] = datetime.now(timezone.utc)
-    data["status"] = "ACTIVE"
-    from ..utility.database import get_database
-    db = get_database()
-    await db["business_book"].insert_one(data)
+    item.business_id = PyObjectId(business_id)
+    item.status = "DRAFT"
+    await create_query(item)
     return Response(status_code=201)
 
 
@@ -40,6 +36,32 @@ async def update_service(
         raise HTTPException(status_code=404, detail="BusinessBook not found")
     if str(existing.business_id) != business_id:
         raise HTTPException(status_code=403, detail="Cannot update another business's listing")
+    if (
+        existing.status == "SUSPENDED"
+        and item.status is not None
+        and item.status != existing.status
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Suspended listings cannot be reactivated by seller",
+        )
+    if item.status is not None and item.status not in SELLER_MUTABLE_LISTING_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="Listing status must be one of: DRAFT, ACTIVE, INACTIVE",
+        )
+    if (
+        item.status is not None
+        and item.status != existing.status
+        and item.status
+        not in SELLER_LISTING_STATUS_TRANSITIONS.get(existing.status, frozenset())
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot change listing status from {existing.status} to {item.status}"
+            ),
+        )
     update = await update_query(id, item)
     if update.matched_count == 0:
         raise HTTPException(status_code=404, detail="BusinessBook not found")
@@ -52,7 +74,7 @@ async def delete_service(id: str, business_id: str) -> Response:
         raise HTTPException(status_code=404, detail="BusinessBook not found")
     if str(existing.business_id) != business_id:
         raise HTTPException(status_code=403, detail="Cannot delete another business's listing")
-    deleted = await delete_query(id)
+    await delete_query(id)
     return Response(status_code=204)
 
 

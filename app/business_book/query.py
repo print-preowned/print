@@ -22,7 +22,8 @@ async def create_query(item: BusinessBookCreateRequest):
     now = datetime.now(timezone.utc)
     data["updated_at"] = now
     data["created_at"] = now
-    data["status"] = "ACTIVE"
+    if not data.get("status"):
+        data["status"] = "DRAFT"
 
     await collection.insert_one(data)
 

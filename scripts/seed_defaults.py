@@ -84,6 +84,7 @@ PLATFORM_PRIVILEGES = [
     {"code": "MANAGE_USERS", "description": "Manage all users on the platform"},
     {"code": "MANAGE_BOOKS", "description": "Manage all books on the platform"},
     {"code": "MANAGE_AUTHORS", "description": "Manage all authors on the platform"},
+    {"code": "VIEW_VARIANTS", "description": "View variants across the platform"},
     {"code": "MANAGE_PRIVILEGES", "description": "Manage all privileges on the platform"},
     {"code": "MANAGE_SYSTEM_SETTINGS", "description": "Manage system-wide settings"},
 ]
@@ -101,6 +102,7 @@ PLATFORM_PRIVILEGE_SETS = [
             "MANAGE_USERS",
             "MANAGE_BOOKS",
             "MANAGE_AUTHORS",
+            "VIEW_VARIANTS",
             "MANAGE_PRIVILEGES",
             "MANAGE_SYSTEM_SETTINGS",
         ]
@@ -114,6 +116,7 @@ PLATFORM_PRIVILEGE_SETS = [
             "MANAGE_USERS",
             "MANAGE_BOOKS",
             "MANAGE_AUTHORS",
+            "VIEW_VARIANTS",
             "MANAGE_PRIVILEGES",
         ]
     },
@@ -125,6 +128,7 @@ PLATFORM_PRIVILEGE_SETS = [
             "MANAGE_USERS",
             "MANAGE_BOOKS",
             "MANAGE_AUTHORS",
+            "VIEW_VARIANTS",
         ]
     },
 ]

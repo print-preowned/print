@@ -2,14 +2,12 @@ from fastapi import HTTPException, Response
 from app.variant.model import (
     Variant,
     VariantCreateRequest,
-    VariantCreateWithConfigRequest,
     VariantUpdateRequest,
     VariantWithConfig,
     PublicCatalogVariant,
 )
 from .query import (
     create_query,
-    create_with_config_query,
     delete_query,
     read_by_business_book_id_query,
     read_by_id_query,
@@ -46,29 +44,18 @@ async def _assert_variant_belongs_to_business_book(
     return variant
 
 
-async def create_service(item: VariantCreateRequest) -> Response:
-    await create_query(item)
-    return Response(status_code=201)
 
-
-async def create_scoped_service(
+async def create_service(
     business_book_id: str,
-    payload: VariantCreateWithConfigRequest,
+    payload: VariantCreateRequest,
     business_id: str,
 ) -> BaseResponse[dict]:
     await _assert_business_book_owned(business_book_id, business_id)
-    variant_id = await create_with_config_query(business_book_id, payload)
+    variant_id = await create_query(business_book_id, payload)
     return BaseResponse(status_code=201, message="Created", data={"id": variant_id})
 
 
-async def update_service(id: str, item: VariantUpdateRequest) -> Response:
-    update = await update_query(id, item)
-    if update.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Variant not found")
-    return Response(status_code=200)
-
-
-async def update_scoped_service(
+async def update_service(
     business_book_id: str,
     variant_id: str,
     payload: VariantUpdateRequest,
@@ -83,14 +70,7 @@ async def update_scoped_service(
     return Response(status_code=200)
 
 
-async def delete_service(id: str) -> Response:
-    deleted = await delete_query(id)
-    if deleted.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Variant not found")
-    return Response(status_code=204)
-
-
-async def delete_scoped_service(
+async def delete_service(
     business_book_id: str, variant_id: str, business_id: str
 ) -> Response:
     await _assert_variant_belongs_to_business_book(

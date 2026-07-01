@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import ConfigDict, Field, field_serializer
 from app.utility.model import BaseAppModel, PyObjectId
 
 
@@ -20,8 +20,9 @@ class Variant(BaseAppModel):
     updated_at: datetime
 
 
-class VariantCreateRequest(BaseModel):
-    business_book_id: PyObjectId
+class VariantCreateRequest(BaseAppModel):
+    """Create sellable variant with option config (one per variant type)."""
+    variant_option_ids: list[PyObjectId]
     description: Optional[str] = None
     stock: int
     price: float
@@ -29,10 +30,9 @@ class VariantCreateRequest(BaseModel):
     discount: Optional[float] = None
     sku: Optional[str] = None
     image: Optional[str] = None
-    status: str = "ACTIVE"
 
 
-class VariantUpdateRequest(BaseModel):
+class VariantUpdateRequest(BaseAppModel):
     """Mutable fields only — business_book_id and config are set at create."""
     description: Optional[str] = None
     stock: Optional[int] = None
@@ -41,12 +41,11 @@ class VariantUpdateRequest(BaseModel):
     discount: Optional[float] = None
     sku: Optional[str] = None
     image: Optional[str] = None
-    status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 
 
-class ResolvedConfig(BaseModel):
+class ResolvedConfig(BaseAppModel):
     """Resolved variant type + option for display."""
     variant_type_id: str
     variant_type_name: str
@@ -58,20 +57,7 @@ class VariantWithConfig(Variant):
     config: list[ResolvedConfig] = []
 
 
-class VariantCreateWithConfigRequest(BaseModel):
-    """Create sellable variant with option config (one per variant type)."""
-    variant_option_ids: list[PyObjectId]
-    description: Optional[str] = None
-    stock: int
-    price: float
-    currency: str
-    discount: Optional[float] = None
-    sku: Optional[str] = None
-    image: Optional[str] = None
-    status: str = "ACTIVE"
-
-
-class PublicCatalogVariant(BaseModel):
+class PublicCatalogVariant(BaseAppModel):
     """Customer-facing sellable variant with joined book and business data."""
     id: str
     business_book_id: str

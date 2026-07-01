@@ -1,12 +1,23 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.variant.model import VariantWithConfig
-from app.utility.model import PyObjectId
+from app.utility.model import BaseAppModel, PyObjectId
+
+BusinessBookListingStatus = Literal[
+    "DRAFT", "ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"
+]
+SELLER_MUTABLE_LISTING_STATUSES = frozenset({"DRAFT", "ACTIVE", "INACTIVE"})
+# DRAFT is only set at create; sellers cannot revert a published listing to DRAFT.
+SELLER_LISTING_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
+    "DRAFT": frozenset({"DRAFT", "ACTIVE"}),
+    "ACTIVE": frozenset({"ACTIVE", "INACTIVE"}),
+    "INACTIVE": frozenset({"INACTIVE", "ACTIVE"}),
+}
 
 
-class BusinessBook(BaseModel):
+class BusinessBook(BaseAppModel):
     id: PyObjectId = Field(alias="_id", serialization_alias="id")
     book_id: PyObjectId
     business_id: PyObjectId
@@ -16,27 +27,13 @@ class BusinessBook(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_serializer("id")
-    def serialize_id(self, v: ObjectId, _info):
-        return str(v)
-
-    @field_serializer("book_id")
-    def serialize_book_id(self, v: ObjectId, _info):
-        return str(v)
-
-    @field_serializer("business_id")
-    def serialize_business_id(self, v: ObjectId, _info):
-        return str(v)
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
 
 class BusinessBookCreateRequest(BaseModel):
     book_id: PyObjectId
     business_id: Optional[PyObjectId] = None  # Injected by server from token
     synopsis: Optional[str] = None
     image: Optional[str] = None
-    status: str = "ACTIVE"
+    status: str = Field(default="DRAFT", exclude=True)
 
 
 class BusinessBookUpdateRequest(BaseModel):
@@ -45,6 +42,15 @@ class BusinessBookUpdateRequest(BaseModel):
     synopsis: Optional[str] = None
     image: Optional[str] = None
     status: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_update_status(cls, value: str | None) -> str | None:
+        if value is not None and value not in SELLER_MUTABLE_LISTING_STATUSES:
+            raise ValueError(
+                "Listing status must be one of: DRAFT, ACTIVE, INACTIVE"
+            )
+        return value
 
     model_config = ConfigDict(extra="forbid")
 

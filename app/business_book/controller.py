@@ -5,7 +5,7 @@ from app.business_book.model import (
     BusinessBookUpdateRequest,
 )
 from app.variant.model import (
-    VariantCreateWithConfigRequest,
+    VariantCreateRequest,
     VariantUpdateRequest,
     VariantWithConfig,
 )
@@ -17,10 +17,10 @@ from .service import (
     update_service,
 )
 from app.variant.service import (
-    create_scoped_service,
-    delete_scoped_service,
+    create_service as variant_create_service,
+    delete_service as variant_delete_service,
     read_scoped_service,
-    update_scoped_service,
+    update_service as variant_update_service,
 )
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from ..utility.authorization import require_context, TokenPayload, get_business_id
@@ -100,11 +100,11 @@ async def read_variants(
 @router.post("/{business_book_id}/variant", tags=["client"])
 async def create_variant(
     business_book_id: str,
-    payload: VariantCreateWithConfigRequest,
+    payload: VariantCreateRequest,
     token: TokenPayload = Depends(require_context("BUSINESS")),
 ) -> BaseResponse[dict]:
     business_id = _require_business_id(token)
-    return await create_scoped_service(business_book_id, payload, business_id)
+    return await variant_create_service(business_book_id, payload, business_id)
 
 
 @router.put("/{business_book_id}/variant/{variant_id}", tags=["client"])
@@ -115,7 +115,7 @@ async def update_variant(
     token: TokenPayload = Depends(require_context("BUSINESS")),
 ) -> Response:
     business_id = _require_business_id(token)
-    return await update_scoped_service(business_book_id, variant_id, payload, business_id)
+    return await variant_update_service(business_book_id, variant_id, payload, business_id)
 
 
 @router.delete("/{business_book_id}/variant/{variant_id}", tags=["client"])
@@ -125,4 +125,4 @@ async def delete_variant(
     token: TokenPayload = Depends(require_context("BUSINESS")),
 ) -> Response:
     business_id = _require_business_id(token)
-    return await delete_scoped_service(business_book_id, variant_id, business_id)
+    return await variant_delete_service(business_book_id, variant_id, business_id)
