@@ -26,7 +26,6 @@ class VariantCreateRequest(BaseAppModel):
     description: Optional[str] = None
     stock: int
     price: float
-    currency: str
     discount: Optional[float] = None
     sku: Optional[str] = None
     image: Optional[str] = None
