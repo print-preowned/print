@@ -1,0 +1,17 @@
+{
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.13",
+  "include": [
+    "app/utility/orm.py",
+    "app/utility/postgres.py",
+    "alembic/env.py"
+  ],
+  "exclude": [
+    "**/__pycache__"
+  ],
+  "reportMissingTypeStubs": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportUnknownArgumentType": "warning"
+}
+

@@ -1,9 +1,11 @@
 import asyncio
 import time
+from contextlib import asynccontextmanager
 
-from fastapi.openapi.utils import get_openapi
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from starlette.routing import BaseRoute, Router
 
 from app.middleware.auth import AuthMiddleware
@@ -29,7 +31,6 @@ from .variant_type import controller as variantTypeController
 from .variant_option import controller as variantOptionController
 from .variant_config import controller as variantConfigController
 from .entity_image import controller as entityImageController
-from fastapi import Depends, FastAPI, HTTPException, Request
 from app.module import controller as moduleController
 from app.platform_user import controller as platformUserController
 from app.platform_privilege_set import controller as platformPrivilegeSetController
@@ -37,12 +38,22 @@ from app.platform_privilege import controller as platformPrivilegeController
 from app.platform_privilege_set_privilege import controller as platformPrivilegeSetPrivilegeController
 from app.platform_invite import controller as platformInviteController
 from app.password_reset_token import controller as passwordResetTokenController
+from app.utility.postgres import dispose_postgres_engine
 
 HIDDEN_TAGS = {"client", "platform"}
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await dispose_postgres_engine()
+
+
 app = FastAPI(
     title="Print",
     description="Swagger UI for print doc",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 def custom_openapi(title: str, version: str, description: str, routes: list[BaseRoute]):

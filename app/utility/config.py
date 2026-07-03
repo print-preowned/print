@@ -20,6 +20,10 @@ class Settings:
     jwt_secret: str
     mongodb_uri: str
     mongodb_db_name: str
+    postgres_dsn: str
+    postgres_echo: bool
+    postgres_pool_size: int
+    postgres_max_overflow: int
     redis_host: str
     redis_port: int
     redis_password: str | None
@@ -57,6 +61,13 @@ def get_settings() -> Settings:
         jwt_secret=jwt_secret,
         mongodb_uri=os.environ.get("MONGODB_URI", "mongodb://localhost:27017"),
         mongodb_db_name=os.environ.get("MONGODB_DB_NAME", "print"),
+        postgres_dsn=os.environ.get(
+            "POSTGRES_DSN",
+            "postgresql+asyncpg://postgres:postgres@localhost:5432/print",
+        ),
+        postgres_echo=_env_bool("POSTGRES_ECHO"),
+        postgres_pool_size=int(os.environ.get("POSTGRES_POOL_SIZE", "5")),
+        postgres_max_overflow=int(os.environ.get("POSTGRES_MAX_OVERFLOW", "10")),
         redis_host=os.environ.get("REDIS_HOST", "localhost"),
         redis_port=int(os.environ.get("REDIS_PORT", "6379")),
         redis_password=os.environ.get("REDIS_PASSWORD"),
