@@ -18,7 +18,7 @@ from ..role_privilege.query import (
 )
 from ..role.service import read_owner_role_service
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
-from app.utility.model import PyObjectId
+from app.auth.privilege_catalog import crud_privilege_defs, CrudResourceDef
 
 
 async def create_module_service(request: ModuleCreateRequest) -> Response:
@@ -45,53 +45,46 @@ async def create_module_service(request: ModuleCreateRequest) -> Response:
         )
     
     owner_role_id = owner_role.id
-    
-    # Standard privilege codes to create for a module
-    standard_privileges = [
-        {"code": f"CREATE_{module_name.upper()}", "name": f"Create {module_name}"},
-        {"code": f"READ_{module_name.upper()}", "name": f"Read {module_name}"},
-        {"code": f"UPDATE_{module_name.upper()}", "name": f"Update {module_name}"},
-        {"code": f"DELETE_{module_name.upper()}", "name": f"Delete {module_name}"},
-    ]
-    
-    # Process privilege creation and role_privilege mapping
-    for priv_info in standard_privileges:
-        privilege_code = priv_info["code"]
-        
-        # Check if privilege already exists
+
+    resource = CrudResourceDef(
+        resource=module_name.upper(),
+        module=module_name,
+        include_delete=module_name.upper() not in {"AUTHOR"},
+    )
+    privilege_defs = crud_privilege_defs(resource)
+
+    for privilege_def in privilege_defs:
+        privilege_code = privilege_def.code
+
         existing = await privilege_read_by_code_query(privilege_code)
         if existing:
-            # Privilege exists, check if owner role mapping exists
             role_id_str = str(owner_role_id)
             existing_mapping = await read_by_role_and_privilege_query(role_id_str, privilege_code)
             if not existing_mapping:
-                # Create role_privilege mapping for owner role
                 mapping = RolePrivilegeCreateRequest(
                     role_id=owner_role_id,
                     privilege_code=privilege_code,
-                    status="ACTIVE"
+                    status="ACTIVE",
                 )
                 await role_privilege_create_query(mapping)
             continue
-        
-        # Create the privilege
+
         privilege_data = PrivilegeCreateRequest(
             code=privilege_code,
-            name=priv_info["name"],
+            name=privilege_def.name,
             module_name=module_name,
-            status="ACTIVE"
+            status="ACTIVE",
         )
-        
+
         await privilege_create_query(privilege_data)
-        
-        # Create role_privilege mapping for owner role
+
         mapping = RolePrivilegeCreateRequest(
             role_id=owner_role_id,
             privilege_code=privilege_code,
-            status="ACTIVE"
+            status="ACTIVE",
         )
         await role_privilege_create_query(mapping)
-    
+
     return Response(status_code=201)
 
 

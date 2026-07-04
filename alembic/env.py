@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.genre import orm as genre_orm  # noqa: F401
 from app.utility.config import get_settings
 from app.utility.orm import Base
 

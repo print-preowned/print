@@ -45,6 +45,15 @@ class TimestampMixin:
     )
 
 
+class SoftDeleteMixin:
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class StatusMixin:
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="ACTIVE",
+        server_default="ACTIVE",
+    )
 

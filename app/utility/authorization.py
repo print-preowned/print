@@ -183,8 +183,6 @@ def require_privilege(privilege: str):
         # For PLATFORM context, also check for MANAGE_<RESOURCE> privilege
         if not has_privilege and token_payload.ctx == "PLATFORM":
             manage_privilege = _extract_manage_privilege(privilege)
-            print(f"manage_privilege: {manage_privilege}")
-            print(f"privileges: {privileges}")
             if manage_privilege:
                 has_privilege = manage_privilege in privileges
         

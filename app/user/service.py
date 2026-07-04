@@ -4,10 +4,10 @@ import jwt
 from app.user.model import LoginRequest, LoginResponse, SignupRequest, User, UserCreateRequest, UserUpdateRequest, ContextSwitchRequest, ContextSwitchResponse
 from app.utility.redis import set_key
 from app.utility.token import create_customer_token, create_business_token, create_platform_token
-from app.business.query import read_by_user_id_query, read_by_id_query as read_business_by_id_query
+from app.business.query import read_by_id_query as read_business_by_id_query
 from app.business_user.query import read_one_by_user_id_query
-from app.role.query import read_by_id_query as read_role_by_id_query
-from app.role.model import Role
+from app.role.model import Role, OWNER_ROLE_CODE
+from app.role.query import read_by_id_query as read_role_by_id_query, read_by_code_query as read_role_by_code_query
 from app.role_privilege.query import read_privilege_codes_by_role_id_query
 from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
 from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
@@ -189,41 +189,31 @@ async def switch_context_service(
         raise HTTPException(status_code=404, detail="User not found")
     
     if target_context == "BUSINESS":
-        # Switch to BUSINESS context: resolve business by ownership (business.user_id) or membership (business_user)
-        business = await read_by_user_id_query(user_id)
-        is_owner = business is not None
-        membership = None
-        if not business:
-            membership = await read_one_by_user_id_query(user_id)
-            if membership:
-                business = await read_business_by_id_query(str(membership.business_id))
-        if not business:
+        membership = await read_one_by_user_id_query(user_id)
+        if not membership:
             raise HTTPException(
                 status_code=404,
-                detail="You don't have a business. Please create one first."
+                detail="You don't have a business. Please create one first.",
             )
 
+        business = await read_business_by_id_query(str(membership.business_id))
+        if not business:
+            raise HTTPException(status_code=404, detail="Business not found")
+
         business_id = str(business.id)
-        if is_owner:
-            role_id = "owner-role-id"
-            role_name = "Owner"
-            is_system_role = False
-            privileges = [
-                "READ_USER", "CREATE_USER", "UPDATE_USER", "DELETE_USER",
-                "READ_BOOK", "CREATE_BOOK", "UPDATE_BOOK", "DELETE_BOOK",
-                "READ_AUTHOR", "CREATE_AUTHOR", "UPDATE_AUTHOR",
-                "READ_INVENTORY", "CREATE_VARIANT", "UPDATE_VARIANT", "DELETE_VARIANT",
-                "READ_ORDER", "UPDATE_ORDER_STATUS", "REFUND_ORDER",
-                "READ_RATING", "UPDATE_RATING",
-            ]
+        is_owner = str(business.user_id) == user_id
+
+        owner_role = await read_role_by_code_query(OWNER_ROLE_CODE)
+        if is_owner and owner_role:
+            role_id = str(owner_role.id)
+            role_name = owner_role.name
         else:
-            if not membership:
-                raise HTTPException(status_code=404, detail="Business membership not found.")
             role_id = str(membership.role_id)
             role_record = await read_role_by_id_query(role_id)
             role_name = Role.model_validate(role_record).name if role_record else "Member"
-            is_system_role = False
-            privileges = await read_privilege_codes_by_role_id_query(role_id)
+
+        is_system_role = False
+        privileges = await read_privilege_codes_by_role_id_query(role_id)
         
         # Create business token
         token = create_business_token(

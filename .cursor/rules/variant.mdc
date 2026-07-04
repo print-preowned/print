@@ -1,0 +1,54 @@
+---
+alwaysApply: true
+---
+  variants:
+    entity_scope: BUSINESS_OWNED
+    notes: >
+      Variant is the sellable SKU (price, stock, product option values).
+      "Inventory" is a UI label for a seller's collection of listings and variants — not an API path noun.
+
+    endpoints:
+      GET /variants:
+        context: CUSTOMER
+        action: READ_PUBLIC_VARIANTS
+
+      GET /variants/{variantId}:
+        context: CUSTOMER
+        action: READ_PUBLIC_VARIANTS
+
+      GET /business/{businessId}/variants:
+        context: BUSINESS
+        privilege: READ_VARIANT
+        enforce:
+          - business_id_match
+
+      POST /business/{businessId}/variants:
+        context: BUSINESS
+        privilege: CREATE_VARIANT
+        enforce:
+          - business_id_match
+
+      PATCH /variants/{variantId}:
+        context: BUSINESS
+        privilege: UPDATE_VARIANT
+        enforce:
+          - business_id_match
+          - entity_belongs_to_business
+
+      DELETE /variants/{variantId}:
+        context: BUSINESS
+        privilege: DELETE_VARIANT
+        owner_only: true
+        enforce:
+          - business_id_match
+          - entity_belongs_to_business
+
+      GET /business-books/{businessBookId}/variants:
+        context: BUSINESS
+        privilege: READ_VARIANT
+        enforce:
+          - entity_belongs_to_business
+
+    invariants:
+      - id: MDC-BE-VARIANT-1
+        assertion: variants_are_business_scoped

@@ -8,6 +8,7 @@
 - Migration style: phased port with a final cutover, not a single big-bang rewrite.
 - Authorization invariant: middleware remains DB-free; JWT and Redis continue to be the request authority.
 - Typing policy: static checking via Pyright; runtime validation via Pydantic at API boundaries; SQLAlchemy `Mapped[...]` for persistence.
+- Naming policy: plural Postgres tables and controller routes; singular Pydantic schemas; see `docs/POSTGRES_SCHEMA_PHASE_2.md` for inventory vocabulary (`product_option`, `product_option_value`, `variant`).
 
 ## Current Persistence Shape
 
@@ -50,7 +51,7 @@ These are part of the migration direction, not separate cleanup work. Each impro
 
 - Convert app-enforced relationships into foreign keys where the domain allows it.
 - Convert high-value uniqueness rules into database constraints or partial unique indexes.
-- Design a consistent soft-delete strategy so repositories do not hand-code `status != "DELETED"` in every query.
+- Design a consistent `deleted_at` soft-delete strategy so repositories do not hand-code deletion filters in every query.
 - Make a deliberate decision for `entity_image`: either preserve the polymorphic `entity_name`/`entity_id` shape temporarily or split it into safer typed associations.
 - Normalize timestamps to timezone-aware UTC.
 
@@ -72,7 +73,7 @@ These are part of the migration direction, not separate cleanup work. Each impro
 
 - Replace application-side joins with explicit SQL joins, relationship loading, or focused read models.
 - Use real transactions for multi-write flows such as variant creation, variant config creation, soft-delete cascades, invite acceptance, and order writes.
-- Add constraints for rating uniqueness and variant option-combination uniqueness where feasible.
+- Add constraints for rating uniqueness and product option combination uniqueness where feasible.
 - Preserve public catalog and pagination response shapes.
 
 ### Phase 6: Data Migration And Cutover
@@ -249,9 +250,9 @@ Path parameters are already generally typed as `str`, so route signatures should
 | `book_genre` | `app/book_genre` | Book-genre join | `book_id`, `genre_id` |
 | `business_book` | `app/business_book` | Business listing | `book_id`, `business_id` |
 | `variant` | `app/variant` | Sellable SKU | `business_book_id` |
-| `variant_type` | `app/variant_type` | Variant option dimension | none |
-| `variant_option` | `app/variant_option` | Variant option value | `variant_type_id` |
-| `variant_config` | `app/variant_config` | Variant-option join | `variant_id`, `variant_option_id` |
+| `variant_type` → `product_options` | `app/variant_type` | Product option category | none |
+| `variant_option` → `product_option_values` | `app/variant_option` | Product option value | `product_option_id` (was `variant_type_id`) |
+| `variant_config` → `variant_product_option_values` | `app/variant_config` | Variant ↔ product option value join | `variant_id`, `product_option_value_id` |
 | `order` | `app/order` | Customer order | `user_id` |
 | `order_item` | `app/order_item` | Order line item | `order_id`, `variant_id` |
 | `book_rating` | `app/book_rating` | Book rating | `book_id`, `user_id` |
@@ -265,15 +266,15 @@ Path parameters are already generally typed as `str`, so route signatures should
 The current app uses soft deletes almost everywhere:
 
 - Delete operations set `status = "DELETED"`.
-- Read operations generally filter with `status != "DELETED"`.
+- Current Mongo read operations generally filter with `status != "DELETED"`; PostgreSQL repositories should instead filter with `deleted_at IS NULL`.
 - There are no hard deletes in normal app query modules.
 
-PostgreSQL should preserve this behavior initially through explicit `status` columns and filtered repository helpers. Later, high-value paths can add partial indexes such as active/non-deleted uniqueness constraints.
+PostgreSQL should preserve the externally visible behavior while changing the storage mechanism: deletion should become `deleted_at IS NOT NULL`, while `status` should describe lifecycle states such as `ACTIVE`, `DRAFT`, `PENDING`, or `SUSPENDED`. Later, high-value paths can add partial indexes such as `WHERE deleted_at IS NULL`.
 
 Important status variants:
 
 - Most entities default to `ACTIVE`.
-- `business_book` uses listing states such as `DRAFT`, `ACTIVE`, `INACTIVE`, `SUSPENDED`, and `DELETED`.
+- `business_book` uses listing states such as `DRAFT`, `ACTIVE`, `INACTIVE`, and `SUSPENDED`; deletion should move to `deleted_at`.
 - `user` can be `NEW`, especially for platform bootstrap/password-change flows.
 - `platform_invite` uses invitation lifecycle states like `PENDING`, `ACCEPTED`, `REJECTED`, and `EXPIRED`.
 - `password_reset_token` uses `used` and `used_at` rather than a status column.
@@ -304,8 +305,8 @@ Some flows write several collections without transaction support today. PostgreS
 
 Examples:
 
-- Variant creation inserts a `variant` and multiple `variant_config` rows.
-- Variant soft delete cascades to `variant_config`.
+- Variant creation inserts a `variant` and multiple `variant_product_option_values` rows (legacy: `variant_config`).
+- Variant soft delete cascades to `variant_product_option_values` (legacy: `variant_config`).
 - Business book delete cascades into variants and variant configs.
 - Platform invite acceptance creates identity/platform records and marks the invite accepted.
 
@@ -323,7 +324,7 @@ Candidates:
 - `platform_privilege_set.name`
 - `platform_invite.token_hash`
 - one rating per eligible target/order where required
-- variant option combination uniqueness per `business_book`
+- variant product option combination uniqueness per `business_book`
 
 ## Auth And Context-Switch Impact
 

@@ -106,8 +106,8 @@ See [scripts/README.md](./scripts/README.md) for details.
 | Area | Examples |
 | --- | --- |
 | Auth | `/user/login`, `/user/signup`, `/auth/context/business/{id}` |
-| Catalog | `/book/read`, `/author/read`, `/genre/read` |
-| Business | `/business/{id}/inventory`, `/business/{id}/orders` |
+| Catalog | `/book/read`, `/author/read`, `/variants/read` |
+| Business | `/business-books/{id}/variants`, `/business/{id}/orders` |
 | Platform | `/platform-user/login`, `/admin/*` (platform context) |
 
 Protected routes require a `Bearer` JWT. Context and privileges are enforced server-side from token claims only.
