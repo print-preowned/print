@@ -1,4 +1,4 @@
-from app.genre.model import Genre, GenreCreateRequest, GenreUpdateRequest
+from app.genre.schemas import GenreCreate, GenreRead, GenreUpdate
 from .service import (
     delete_service,
     read_service,
@@ -13,30 +13,28 @@ router = APIRouter(prefix="/genre", tags=["GenreController"])
 
 
 @router.post("/create")
-async def create(payload: GenreCreateRequest) -> Response:
+async def create(payload: GenreCreate) -> Response:
     return await create_service(payload)
 
 
 @router.put("/update/{id}")
-async def update(id: str, payload: GenreUpdateRequest) -> Response:
+async def update(id: str, payload: GenreUpdate) -> Response:
     return await update_service(id, payload)
 
 
 @router.delete("/delete/{id}")
-async def delete(id) -> Response:
+async def delete(id: str) -> Response:
     return await delete_service(id)
 
 
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[Genre]:
+) -> PaginatedResponse[GenreRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[Genre]:
+async def read_by_id(id: str) -> BaseResponse[GenreRead]:
     return await read_by_id_service(id)
-
-

@@ -23,4 +23,4 @@ jobs:
         run: pyright
 
       - name: Run privilege and route authorization guards
-        run: pytest tests/test_route_authorization.py -q
+        run: pytest tests/ -q

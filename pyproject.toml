@@ -20,6 +20,7 @@ dependencies = [
     "boto3>=1.43",
     "certifi>=2025.8",
     "fastapi>=0.116",
+    "greenlet>=3.0",
     "motor>=3.7",
     "pwdlib>=0.2",
     "pydantic>=2.11",
@@ -34,6 +35,7 @@ dependencies = [
 dev = [
     "pyright>=1.1",
     "pytest>=8.0",
+    "pytest-asyncio>=0.25",
 ]
 
 [project.urls]
@@ -50,6 +52,9 @@ include = ["app*"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

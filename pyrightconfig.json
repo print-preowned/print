@@ -5,6 +5,8 @@
     "app/genre/orm.py",
     "app/genre/repository.py",
     "app/genre/schemas.py",
+    "app/genre/service.py",
+    "app/genre/query.py",
     "app/utility/orm.py",
     "app/utility/postgres.py",
     "alembic/env.py",

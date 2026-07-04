@@ -9,7 +9,9 @@ pydantic==2.11.7
 PyJWT==2.10.1
 pyright==1.1.411
 pytest==8.4.1
+pytest-asyncio>=0.25
 python-dotenv==1.1.1
 redis==7.1.0
 SQLAlchemy==2.0.51
+greenlet==3.2.4
 uvicorn[standard]==0.35.0

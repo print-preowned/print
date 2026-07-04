@@ -3,6 +3,8 @@ __all__ = [
     "query",
     "service",
     "controller",
+    "repository",
+    "schemas",
 ]
 
 

@@ -13,7 +13,7 @@ from app.book.model import (
     AuthorRef,
     GenreRef,
 )
-from app.genre.model import Genre
+from app.genre.schemas import GenreRead
 from app.book_author.model import BookAuthorCreateRequest
 from app.book_genre.model import BookGenreCreateRequest
 from app.utility.aws.s3 import (
@@ -197,7 +197,7 @@ def _author_ref(author: Author) -> AuthorRef:
     )
 
 
-def _genre_ref(genre: Genre) -> GenreRef:
+def _genre_ref(genre: GenreRead) -> GenreRef:
     return GenreRef(id=str(genre.id), name=genre.name or "")
 
 
@@ -205,7 +205,7 @@ def _author_refs(authors: list[Author]) -> list[AuthorRef]:
     return [_author_ref(author) for author in authors]
 
 
-def _genre_refs(genres: list[Genre]) -> list[GenreRef]:
+def _genre_refs(genres: list[GenreRead]) -> list[GenreRef]:
     return [_genre_ref(genre) for genre in genres]
 
 

@@ -25,8 +25,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.author.model import AuthorCreateRequest
 from app.author.query import create_query as create_author_query
-from app.genre.model import GenreCreateRequest
-from app.genre.query import create_query as create_genre_query
+from app.genre.schemas import GenreCreate
+from app.genre.repository import create_genre
+from app.utility.postgres import get_sessionmaker
 from app.book.model import BookCreateRequest
 from app.book.query import create_query as create_book_query
 
@@ -70,16 +71,16 @@ async def upload_genres(file_path: Path) -> Dict[str, Any]:
         reader = csv.DictReader(f)
         for idx, row in enumerate(reader, start=2):
             try:
-                # Create GenreCreateRequest to validate data
-                genre_request = GenreCreateRequest(
+                genre_payload = GenreCreate(
                     name=row["name"].strip(),
                     description=row.get("description", "").strip() or None,
-                    status=row.get("status", "ACTIVE").strip(),
                 )
-                
-                await create_genre_query(genre_request)
+
+                async with get_sessionmaker()() as session:
+                    await create_genre(session, genre_payload)
+                    await session.commit()
                 results["success"] += 1
-                print(f"✓ Row {idx}: Created genre {genre_request.name}")
+                print(f"✓ Row {idx}: Created genre {genre_payload.name}")
                 
             except Exception as e:
                 results["failed"] += 1
