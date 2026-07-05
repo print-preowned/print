@@ -11,6 +11,24 @@ from app.utility.config import get_settings
 
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
+_orm_models_loaded: bool = False
+
+
+def _load_orm_models() -> None:
+    """Import ORM modules so FK targets exist on Base.metadata before first flush."""
+    global _orm_models_loaded
+    if _orm_models_loaded:
+        return
+
+    from app.business import orm as business_orm  # noqa: F401
+    from app.business_user import orm as business_user_orm  # noqa: F401
+    from app.genre import orm as genre_orm  # noqa: F401
+    from app.privilege import orm as privilege_orm  # noqa: F401
+    from app.role import orm as role_orm  # noqa: F401
+    from app.role_privilege import orm as role_privilege_orm  # noqa: F401
+    from app.user import orm as user_orm  # noqa: F401
+
+    _orm_models_loaded = True
 
 
 def get_postgres_engine() -> AsyncEngine:
@@ -30,6 +48,7 @@ def get_postgres_engine() -> AsyncEngine:
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     global _sessionmaker
     if _sessionmaker is None:
+        _load_orm_models()
         _sessionmaker = async_sessionmaker(
             bind=get_postgres_engine(),
             expire_on_commit=False,

@@ -72,7 +72,7 @@ async def create_super_admin_user(email: str, password: str, first_name: str = "
         privilege_set_id = await find_super_admin_privilege_set()
         
         platform_user_data = PlatformUserCreateRequest(
-            user_id=existing_user.id,
+            user_id=str(existing_user.id),
             platform_privilege_set_id=privilege_set_id,
             status="ACTIVE"
         )
@@ -108,7 +108,7 @@ async def create_super_admin_user(email: str, password: str, first_name: str = "
     privilege_set_id = await find_super_admin_privilege_set()
     
     platform_user_data = PlatformUserCreateRequest(
-        user_id=created_user.id,
+        user_id=str(created_user.id),
         platform_privilege_set_id=privilege_set_id,
         status="ACTIVE"
     )

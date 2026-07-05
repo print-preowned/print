@@ -1,25 +1,34 @@
 from datetime import datetime
 from typing import Optional
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, EmailStr
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from app.user.model import SignupRequest
 from app.utility.model import BaseAppModel, BaseResponse, PyObjectId
 
 
 class PlatformUser(BaseAppModel):
     id: PyObjectId = Field(alias="_id", serialization_alias="id")
-    user_id: PyObjectId
+    user_id: str
     platform_privilege_set_id: PyObjectId
     status: str
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("user_id", mode="before")
+    @classmethod
+    def normalize_user_id(cls, value: object) -> str:
+        from bson import ObjectId
+
+        if isinstance(value, ObjectId):
+            return str(value)
+        return str(value)
 
 class PlatformUserSignupRequest(SignupRequest):
     platform_privilege_set_id: PyObjectId
 
 
 class PlatformUserCreateRequest(BaseModel):
-    user_id: PyObjectId
+    user_id: str
     platform_privilege_set_id: PyObjectId
     status: str = "ACTIVE"
 

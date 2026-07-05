@@ -7,7 +7,6 @@ from app.business_user.service import create_service as create_business_user_ser
 from app.business_user.model import BusinessUserCreateRequest
 from app.role.service import read_owner_role_service
 from app.user.query import read_by_id_query as read_user_by_id_query
-from app.user.model import User
 from app.utility.token import create_customer_token
 
 
@@ -15,16 +14,16 @@ async def create_service(business: BusinessCreateRequest, user_id: str) -> Busin
     user_record = await read_user_by_id_query(user_id)
     if not user_record:
         raise HTTPException(status_code=404, detail="User not found")
-    user = User.model_validate(user_record)
+    user = user_record
 
     existing_business = await read_by_user_id_query(user_id)
     if existing_business:
         raise HTTPException(
             status_code=409,
-            detail="You already have a business. Each user can only create one business."
+            detail="You already have a business. Each user can only create one business.",
         )
-    
-    business.user_id = PyObjectId(user_id)
+
+    business.user_id = user_id
     
     # Create the business
     await create_query(business)
@@ -46,14 +45,13 @@ async def create_service(business: BusinessCreateRequest, user_id: str) -> Busin
             detail="Owner role not found. Please ensure standard roles are created."
         )
     
-    role_id = owner_role.id
-    
-    # Create business_user record with owner role
+    role_id = str(owner_role.id)
+
     business_user = BusinessUserCreateRequest(
         business_id=business_id,
-        user_id=PyObjectId(user_id),
+        user_id=user_id,
         role_id=role_id,
-        status="ACTIVE"
+        status="ACTIVE",
     )
     await create_business_user_service(business_user)
 

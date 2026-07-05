@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Annotated, Optional
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, EmailStr
+from app.user.schemas import UserRead
 from app.utility.model import BaseResponse, PyObjectId
 
 
@@ -67,7 +68,7 @@ class UserUpdateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-class LoginResponse(BaseResponse[User]):
+class LoginResponse(BaseResponse[UserRead]):
     token: str
 
 

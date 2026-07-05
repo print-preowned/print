@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Literal
 
-from app.user.model import User
+from app.user.schemas import UserRead
 from app.utility.config import get_settings
 
 JWT_ALGORITHM = "HS256"
@@ -28,7 +28,7 @@ def generate_jti() -> str:
     return str(uuid.uuid4())
 
 
-def create_customer_token(user: User, has_business: bool = False) -> str:
+def create_customer_token(user: UserRead, has_business: bool = False) -> str:
     """
     Create a CUSTOMER context token
 
@@ -105,7 +105,7 @@ def create_business_token(
 
 
 def create_platform_token(
-    user: User,
+    user: UserRead,
     privileges: list[str],
     *,
     password_change_required: bool = False,

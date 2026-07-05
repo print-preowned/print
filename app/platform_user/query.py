@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from bson import ObjectId
+from app.utility.mongo_user_id import mongo_user_id_filter
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from ..utility.database import get_database
 from .model import PlatformUser, PlatformUserCreateRequest, PlatformUserUpdateRequest
@@ -64,7 +65,7 @@ async def read_by_id_query(id: str) -> PlatformUser | None:
 
 async def read_by_user_id_query(user_id: str) -> PlatformUser | None:
     record = await collection.find_one(
-        {"user_id": ObjectId(user_id), "status": {"$ne": "DELETED"}}
+        {**mongo_user_id_filter(user_id), "status": {"$ne": "DELETED"}}
     )
     if not record:
         return None

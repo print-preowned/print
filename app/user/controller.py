@@ -1,4 +1,12 @@
-from app.user.model import LoginRequest, LoginResponse, SignupRequest, User, UserCreateRequest, UserUpdateRequest, ContextSwitchRequest, ContextSwitchResponse
+from app.user.model import (
+    ContextSwitchRequest,
+    ContextSwitchResponse,
+    LoginRequest,
+    LoginResponse,
+    SignupRequest,
+    UserUpdateRequest,
+)
+from app.user.schemas import UserRead
 from .service import (
     delete_service,
     read_service,
@@ -39,18 +47,18 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[User]:
+) -> PaginatedResponse[UserRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[User]:
+async def read_by_id(id: str) -> BaseResponse[UserRead]:
     return await read_by_id_service(id)
 
 
 @router.get("/read/by-role/{role_id}")
-async def read_by_role(role_id: str) -> BaseResponse[list[User]]:
+async def read_by_role(role_id: str) -> BaseResponse[list[UserRead]]:
     return await read_by_role_id_service(role_id)
 
 

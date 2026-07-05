@@ -1,6 +1,9 @@
 from fastapi import HTTPException, Response
 from app.role.model import Role, RoleCreateRequest, RoleUpdateRequest, OWNER_ROLE_CODE
-from .query import delete_query, read_query, read_by_id_query, create_query, update_query, read_by_code_query
+from app.role.repository import read_role_by_code
+from app.role.schemas import RoleRead
+from app.utility.postgres import get_sessionmaker
+from .query import delete_query, read_query, read_by_id_query, create_query, update_query
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 
@@ -40,12 +43,14 @@ async def read_by_id_service(id: str) -> BaseResponse[Role]:
     return BaseResponse[Role](status_code=200, message="Successful", data=role)
 
 
-async def read_owner_role_service() -> BaseResponse[Role | None]:
-    """
-    Get the Owner role by code.
-    Returns the Owner role if found, None otherwise.
-    """
-    role = await read_by_code_query(OWNER_ROLE_CODE)
-    return BaseResponse[Role | None](status_code=200, message="Successful", data=role)
+async def read_owner_role_service() -> BaseResponse[RoleRead | None]:
+    """Get the Owner role by code from Postgres."""
+    async with get_sessionmaker()() as session:
+        role = await read_role_by_code(session, OWNER_ROLE_CODE)
+    return BaseResponse[RoleRead | None](
+        status_code=200,
+        message="Successful",
+        data=RoleRead.model_validate(role) if role else None,
+    )
 
 

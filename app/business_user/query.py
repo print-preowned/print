@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from bson import ObjectId
 from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.mongo_user_id import mongo_user_id_filter
 from ..utility.database import get_database
 from .model import BusinessUser, BusinessUserCreateRequest, BusinessUserUpdateRequest
 import math
@@ -73,7 +74,7 @@ async def read_by_business_id_query(business_id: str) -> list[BusinessUser]:
 async def read_one_by_user_id_query(user_id: str) -> BusinessUser | None:
     """Return one business membership for the user (any role). Used for context switch when user is not owner."""
     record = await collection.find_one(
-        {"user_id": ObjectId(user_id), "status": {"$ne": "DELETED"}}
+        {**mongo_user_id_filter(user_id), "status": {"$ne": "DELETED"}}
     )
     if not record:
         return None

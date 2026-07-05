@@ -289,7 +289,7 @@ async def accept_invite_service(accept_request: PlatformInviteAcceptRequest) -> 
     
     # Create PLATFORM_USER
     platform_user_data = PlatformUserCreateRequest(
-        user_id=PyObjectId(user_id),
+        user_id=user_id,
         platform_privilege_set_id=invite.platform_privilege_set_id,
         status="ACTIVE"
     )

@@ -36,9 +36,9 @@ async def signup_service(user: PlatformUserSignupRequest) -> Response:
 
     await create_service(
         PlatformUserCreateRequest(
-            user_id=PyObjectId(user_id),
+            user_id=user_id,
             platform_privilege_set_id=user.platform_privilege_set_id,
-            status="ACTIVE"
+            status="ACTIVE",
         )
     )
     return Response(status_code=201)
