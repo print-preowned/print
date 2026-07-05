@@ -14,7 +14,10 @@ Run with: python scripts/seed_defaults.py
 
 import asyncio
 import sys
+import uuid
 from pathlib import Path
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -23,12 +26,17 @@ from app.auth.privilege_catalog import (
     PLATFORM_PRIVILEGES,
     business_privilege_defs,
 )
-from app.role.model import RoleCreateRequest, OWNER_ROLE_CODE
-from app.role.query import create_query as create_role_query, read_by_code_query as read_role_by_code_query
-from app.privilege.model import PrivilegeCreateRequest
-from app.privilege.query import create_query as create_privilege_query, read_by_code_query as read_privilege_by_code_query
-from app.role_privilege.model import RolePrivilegeCreateRequest
-from app.role_privilege.query import create_query as create_role_privilege_query, read_by_role_and_privilege_query
+from app.privilege.repository import create_privilege, read_privilege_by_code
+from app.privilege.schemas import PrivilegeCreate
+from app.role.model import OWNER_ROLE_CODE
+from app.role.repository import create_role, read_role_by_code
+from app.role.schemas import RoleCreate
+from app.role_privilege.repository import (
+    create_role_privilege,
+    read_role_privilege_by_role_and_code,
+)
+from app.role_privilege.schemas import RolePrivilegeCreate
+from app.utility.postgres import get_sessionmaker
 from app.platform_privilege.model import PlatformPrivilegeCreateRequest
 from app.platform_privilege.query import create_query as create_platform_privilege_query, read_by_code_query as read_platform_privilege_by_code_query
 from app.platform_privilege_set.model import PlatformPrivilegeSetCreateRequest
@@ -43,39 +51,42 @@ VARIANT_TYPES = {
 }
 
 
-async def create_owner_role():
+async def create_owner_role(session: AsyncSession) -> uuid.UUID:
     print("Creating OWNER role...")
-    existing_role = await read_role_by_code_query(OWNER_ROLE_CODE)
+    existing_role = await read_role_by_code(session, OWNER_ROLE_CODE)
     if existing_role:
         print(f"  ✓ OWNER role already exists (ID: {existing_role.id})")
         return existing_role.id
 
-    role_data = RoleCreateRequest(
-        name="Owner",
-        code=OWNER_ROLE_CODE,
-        description="Business owner role with full access to all privileges",
-        status="ACTIVE",
+    role = await create_role(
+        session,
+        RoleCreate(
+            name="Owner",
+            code=OWNER_ROLE_CODE,
+            description="Business owner role with full access to all privileges",
+        ),
     )
-    role_id = await create_role_query(role_data)
-    print(f"  ✓ Created OWNER role (ID: {role_id})")
-    return role_id
+    print(f"  ✓ Created OWNER role (ID: {role.id})")
+    return role.id
 
 
-async def seed_business_privilege(privilege_def, owner_role_id: PyObjectId) -> tuple[bool, bool]:
+async def seed_business_privilege(
+    session: AsyncSession, privilege_def, owner_role_id: uuid.UUID
+) -> tuple[bool, bool]:
     created = False
     mapped = False
 
-    existing_privilege = await read_privilege_by_code_query(privilege_def.code)
+    existing_privilege = await read_privilege_by_code(session, privilege_def.code)
     if existing_privilege:
         print(f"    - {privilege_def.code} already exists")
     else:
-        await create_privilege_query(
-            PrivilegeCreateRequest(
+        await create_privilege(
+            session,
+            PrivilegeCreate(
                 code=privilege_def.code,
                 name=privilege_def.name,
                 module_name=privilege_def.module,
-                status="ACTIVE",
-            )
+            ),
         )
         created = True
         print(f"    ✓ Created {privilege_def.code}")
@@ -83,17 +94,18 @@ async def seed_business_privilege(privilege_def, owner_role_id: PyObjectId) -> t
     if not privilege_def.owner_default:
         return created, mapped
 
-    role_id_str = str(owner_role_id)
-    existing_mapping = await read_by_role_and_privilege_query(role_id_str, privilege_def.code)
+    existing_mapping = await read_role_privilege_by_role_and_code(
+        session, owner_role_id, privilege_def.code
+    )
     if existing_mapping:
         print(f"    - {privilege_def.code} already mapped to OWNER role")
     else:
-        await create_role_privilege_query(
-            RolePrivilegeCreateRequest(
+        await create_role_privilege(
+            session,
+            RolePrivilegeCreate(
                 role_id=owner_role_id,
                 privilege_code=privilege_def.code,
-                status="ACTIVE",
-            )
+            ),
         )
         mapped = True
         print(f"    ✓ Mapped {privilege_def.code} to OWNER role")
@@ -101,18 +113,25 @@ async def seed_business_privilege(privilege_def, owner_role_id: PyObjectId) -> t
     return created, mapped
 
 
-async def create_all_privileges(owner_role_id: PyObjectId):
+async def create_all_privileges(session: AsyncSession, owner_role_id: uuid.UUID):
     print("\nCreating business privileges from catalog...")
     total_created = 0
     total_mapped = 0
 
     for privilege_def in business_privilege_defs():
-        created, mapped = await seed_business_privilege(privilege_def, owner_role_id)
+        created, mapped = await seed_business_privilege(session, privilege_def, owner_role_id)
         total_created += int(created)
         total_mapped += int(mapped)
 
     print(f"\n  Summary: Created {total_created} privileges, mapped {total_mapped} to OWNER role")
     return total_created, total_mapped
+
+
+async def seed_business_auth():
+    async with get_sessionmaker()() as session:
+        owner_role_id = await create_owner_role(session)
+        await create_all_privileges(session, owner_role_id)
+        await session.commit()
 
 
 async def create_platform_privileges():
@@ -257,8 +276,7 @@ async def main():
     print("=" * 60)
 
     try:
-        owner_role_id = await create_owner_role()
-        await create_all_privileges(owner_role_id)
+        await seed_business_auth()
         await create_platform_privileges()
         await create_platform_privilege_sets()
         await seed_variant_vocabulary()

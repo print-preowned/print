@@ -2,15 +2,28 @@
   "typeCheckingMode": "basic",
   "pythonVersion": "3.13",
   "include": [
+    "app/business/orm.py",
+    "app/business_user/orm.py",
     "app/genre/orm.py",
     "app/genre/repository.py",
     "app/genre/schemas.py",
     "app/genre/service.py",
     "app/genre/query.py",
+    "app/privilege/orm.py",
+    "app/privilege/repository.py",
+    "app/privilege/schemas.py",
+    "app/role/orm.py",
+    "app/role/repository.py",
+    "app/role/schemas.py",
+    "app/role_privilege/orm.py",
+    "app/role_privilege/repository.py",
+    "app/role_privilege/schemas.py",
+    "app/user/orm.py",
     "app/utility/orm.py",
     "app/utility/postgres.py",
     "alembic/env.py",
-    "alembic/versions/20260703_0001_create_genres.py"
+    "alembic/versions/20260703_0001_create_genres.py",
+    "alembic/versions/20260705_0002_create_auth_foundation.py"
   ],
   "exclude": [
     "**/__pycache__"

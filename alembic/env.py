@@ -6,7 +6,13 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.business import orm as business_orm  # noqa: F401
+from app.business_user import orm as business_user_orm  # noqa: F401
 from app.genre import orm as genre_orm  # noqa: F401
+from app.privilege import orm as privilege_orm  # noqa: F401
+from app.role import orm as role_orm  # noqa: F401
+from app.role_privilege import orm as role_privilege_orm  # noqa: F401
+from app.user import orm as user_orm  # noqa: F401
 from app.utility.config import get_settings
 from app.utility.orm import Base
 

@@ -57,3 +57,9 @@ class StatusMixin:
         server_default="ACTIVE",
     )
 
+
+class BaseOrm(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, StatusMixin, Base):
+    """Default ORM base for domain tables with UUID PK, timestamps, soft delete, and status."""
+
+    __abstract__ = True
+
