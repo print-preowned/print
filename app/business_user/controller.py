@@ -1,8 +1,5 @@
-from app.business_user.model import (
-    BusinessUser,
-    BusinessUserCreateRequest,
-    BusinessUserUpdateRequest,
-)
+from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
+from app.business_user.schemas import BusinessUserRead
 from .service import (
     delete_service,
     read_service,
@@ -35,18 +32,18 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[BusinessUser]:
+) -> PaginatedResponse[BusinessUserRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[BusinessUser]:
+async def read_by_id(id: str) -> BaseResponse[BusinessUserRead]:
     return await read_by_id_service(id)
 
 
 @router.get("/read/by-business/{business_id}")
-async def read_by_business_id(business_id: str) -> BaseResponse[list[BusinessUser]]:
+async def read_by_business_id(business_id: str) -> BaseResponse[list[BusinessUserRead]]:
     return await read_by_business_id_service(business_id)
 
 

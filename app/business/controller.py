@@ -1,4 +1,5 @@
-from app.business.model import Business, BusinessCreateRequest, BusinessCreateResponse, BusinessUpdateRequest
+from app.business.model import BusinessCreateRequest, BusinessCreateResponse, BusinessUpdateRequest
+from app.business.schemas import BusinessRead
 from .service import (
     delete_service,
     read_service,
@@ -72,7 +73,7 @@ async def read(
     size: int = 5,
     search: str | None = None,
     token: TokenPayload = Depends(require_context("BUSINESS"))
-) -> PaginatedResponse[Business]:
+) -> PaginatedResponse[BusinessRead]:
     """
     Read businesses (paginated)
     
@@ -86,7 +87,7 @@ async def read(
 async def read_by_id(
     id: str,
     token: TokenPayload = Depends(require_context("BUSINESS"))
-) -> BaseResponse[Business]:
+) -> BaseResponse[BusinessRead]:
     """
     Read a business by ID
     
@@ -98,7 +99,7 @@ async def read_by_id(
 @router.get("/read/by-user-id", tags=["client"])
 async def read_by_user(
     token: TokenPayload = Depends(get_token_payload)
-) -> BaseResponse[Business | None]:
+) -> BaseResponse[BusinessRead | None]:
     """
     Check if the current user has a business
     

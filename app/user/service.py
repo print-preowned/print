@@ -11,10 +11,9 @@ from app.business.query import read_by_id_query as read_business_by_id_query
 from app.business_user.query import read_one_by_user_id_query
 from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
 from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
-from app.role.model import Role, OWNER_ROLE_CODE
-from app.role.query import read_by_id_query as read_role_by_id_query
+from app.role.model import OWNER_ROLE_CODE
 from app.role.repository import read_role_by_code as read_role_by_code_pg
-from app.role_privilege.query import read_privilege_codes_by_role_id_query
+from app.role.repository import read_role_by_id as read_role_by_id_pg
 from app.role_privilege.repository import read_privilege_codes_by_role_id as read_privilege_codes_by_role_id_pg
 from app.user.model import (
     ContextSwitchResponse,
@@ -271,9 +270,10 @@ async def switch_context_service(
                 privileges = await read_privilege_codes_by_role_id_pg(session, owner_role.id)
         else:
             role_id = str(membership.role_id)
-            role_record = await read_role_by_id_query(role_id)
-            role_name = Role.model_validate(role_record).name if role_record else "Member"
-            privileges = await read_privilege_codes_by_role_id_query(role_id)
+            async with get_sessionmaker()() as session:
+                role_record = await read_role_by_id_pg(session, membership.role_id)
+                privileges = await read_privilege_codes_by_role_id_pg(session, membership.role_id)
+            role_name = role_record.name if role_record else "Member"
 
         token = create_business_token(
             user_id,
