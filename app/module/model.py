@@ -1,8 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from app.utility.model import PyObjectId
 from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
 from app.role_privilege.model import RolePrivilegeCreateRequest
 

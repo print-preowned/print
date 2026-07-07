@@ -18,8 +18,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
 class Settings:
     app_env: str
     jwt_secret: str
-    mongodb_uri: str
-    mongodb_db_name: str
     postgres_dsn: str
     postgres_echo: bool
     postgres_pool_size: int
@@ -59,8 +57,6 @@ def get_settings() -> Settings:
     return Settings(
         app_env=app_env,
         jwt_secret=jwt_secret,
-        mongodb_uri=os.environ.get("MONGODB_URI", "mongodb://localhost:27017"),
-        mongodb_db_name=os.environ.get("MONGODB_DB_NAME", "print"),
         postgres_dsn=os.environ.get(
             "POSTGRES_DSN",
             "postgresql+asyncpg://postgres:postgres@localhost:5432/print",

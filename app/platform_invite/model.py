@@ -1,17 +1,17 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, EmailStr
-from app.utility.model import BaseAppModel, BaseResponse, PyObjectId
+from app.utility.model import BaseAppModel, BaseResponse
 
 
 class PlatformInvite(BaseAppModel):
-    id: PyObjectId = Field(alias="_id", serialization_alias="id")
+    id: str
     email: EmailStr
-    platform_privilege_set_id: PyObjectId
+    platform_privilege_set_id: str
     token_hash: str  # Hashed token, never store raw token (MDC-PU-S-4)
     expires_at: datetime
     status: str  # pending, accepted, rejected, expired
-    invited_by: PyObjectId  # User ID of admin who created the invite
+    invited_by: str  # User ID of admin who created the invite
     created_at: datetime
     accepted_at: Optional[datetime] = None
 

@@ -1,19 +1,12 @@
 from datetime import datetime
 from typing import Optional
-from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
-from app.utility.model import PyObjectId
 
-
-def _coerce_id_to_str(value: object) -> str:
-    if isinstance(value, ObjectId):
-        return str(value)
-    return str(value)
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class BusinessUser(BaseModel):
-    id: PyObjectId = Field(alias="_id", serialization_alias="id")
-    business_id: PyObjectId
+    id: str
+    business_id: str
     user_id: str
     role_id: str
     status: str
@@ -23,32 +16,20 @@ class BusinessUser(BaseModel):
     @field_validator("user_id", "role_id", mode="before")
     @classmethod
     def normalize_user_refs(cls, value: object) -> str:
-        return _coerce_id_to_str(value)
-
-    @field_serializer("id")
-    def serialize_id(self, v: ObjectId, _info):
-        return str(v)
-
-    @field_serializer("business_id")
-    def serialize_business_id(self, v: ObjectId, _info):
-        return str(v)
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+        return str(value)
 
 
 class BusinessUserCreateRequest(BaseModel):
-    business_id: PyObjectId
+    business_id: str
     user_id: str
     role_id: str
     status: str = "ACTIVE"
 
 
 class BusinessUserUpdateRequest(BaseModel):
-    business_id: Optional[PyObjectId] = None
-    user_id: Optional[PyObjectId] = None
-    role_id: Optional[PyObjectId] = None
+    business_id: Optional[str] = None
+    user_id: Optional[str] = None
+    role_id: Optional[str] = None
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
-
-

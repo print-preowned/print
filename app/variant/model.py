@@ -1,12 +1,11 @@
 from datetime import datetime
 from typing import Optional
-from bson import ObjectId
 from pydantic import ConfigDict, Field, field_serializer
-from app.utility.model import BaseAppModel, PyObjectId
+from app.utility.model import BaseAppModel
 
 
 class Variant(BaseAppModel):
-    id: str = Field(alias="_id", serialization_alias="id")
+    id: str
     business_book_id: str
     description: Optional[str] = None
     stock: int

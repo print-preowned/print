@@ -1,9 +1,8 @@
 from datetime import datetime
 from typing import Literal, Optional
-from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.variant.model import VariantWithConfig
-from app.utility.model import BaseAppModel, PyObjectId
+from app.utility.model import BaseAppModel
 
 BusinessBookListingStatus = Literal[
     "DRAFT", "ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"
@@ -18,7 +17,7 @@ SELLER_LISTING_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
 
 
 class BusinessBook(BaseAppModel):
-    id: str = Field(alias="_id", serialization_alias="id")
+    id: str
     book_id: str
     business_id: str
     synopsis: Optional[str] = None

@@ -8,7 +8,7 @@ from .service import (
     update_service,
     read_by_user_id_service,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
+from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from ..utility.authorization import (
     require_context,
     require_owner,

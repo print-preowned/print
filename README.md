@@ -17,7 +17,7 @@ Companion web app: [print-web](https://github.com/) (Next.js).
 
 - Python 3.13+
 - [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn
-- MongoDB (Motor async driver)
+- PostgreSQL (SQLAlchemy async + Alembic migrations)
 - Redis (token revocation)
 - AWS S3 (image storage) with CloudFront CDN for public reads
 - PyJWT
@@ -28,7 +28,7 @@ Companion web app: [print-web](https://github.com/) (Next.js).
 app/
   main.py              # FastAPI app entrypoint
   middleware/          # Auth and request timing
-  utility/             # Config, database, redis, tokens, authorization
+  utility/             # Config, postgres, redis, tokens, authorization
   author/ book/ ...    # Domain modules (controller / service / query / model)
 scripts/               # Database seed utilities
 ```
@@ -40,7 +40,7 @@ See [AUTHORIZATION.md](./AUTHORIZATION.md) for the privilege and context model.
 ### Prerequisites
 
 - Python 3.13+
-- MongoDB (local or Atlas)
+- PostgreSQL 18+ (local or managed)
 - Redis (local or Redis Cloud)
 - AWS credentials with S3 access (for image uploads)
 
@@ -64,8 +64,8 @@ cp .env.example .env
 | --- | --- |
 | `APP_ENV` | `development` or `production` |
 | `JWT_SECRET` | Signing key — must match `print-web` |
-| `MONGODB_URI` | Mongo connection string (`mongodb+srv://` enables TLS) |
-| `MONGODB_DB_NAME` | Database name (default: `print`) |
+| `POSTGRES_DSN` | PostgreSQL connection string (asyncpg driver) |
+| `POSTGRES_ECHO` | Log SQL statements (`true` / `false`) |
 | `REDIS_HOST` | Redis hostname |
 | `REDIS_PORT` | Redis port |
 | `REDIS_PASSWORD` | Redis password (if required) |

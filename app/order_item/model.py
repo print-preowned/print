@@ -1,14 +1,13 @@
 from datetime import datetime
 from typing import Optional
-from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from app.utility.model import BaseAppModel, PyObjectId
+from app.utility.model import BaseAppModel
 
 
 class OrderItem(BaseAppModel):
-    id: PyObjectId = Field(alias="_id", serialization_alias="id")
-    order_id: PyObjectId
-    variant_id: PyObjectId
+    id: str
+    order_id: str
+    variant_id: str
     quantity: int
     unit_price: float
     currency: str
@@ -17,7 +16,6 @@ class OrderItem(BaseAppModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class OrderItemCreateRequest(BaseModel):

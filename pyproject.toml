@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "Proprietary" }
 authors = [{ name = "Print" }]
-keywords = ["fastapi", "marketplace", "books", "jwt", "mongodb"]
+keywords = ["fastapi", "marketplace", "books", "jwt", "postgresql"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: FastAPI",
@@ -21,7 +21,6 @@ dependencies = [
     "certifi>=2025.8",
     "fastapi>=0.116",
     "greenlet>=3.0",
-    "motor>=3.7",
     "pwdlib>=0.2",
     "pydantic>=2.11",
     "PyJWT>=2.10",

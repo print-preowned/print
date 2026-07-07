@@ -17,7 +17,7 @@ from .service import (
     login_service,
     switch_context_service,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
+from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from ..utility.authorization import get_token_payload, TokenPayload
 from fastapi import APIRouter, Request, Response, Depends
 
