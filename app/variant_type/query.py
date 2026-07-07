@@ -1,64 +1,90 @@
-from datetime import datetime, timezone
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest
-from ..utility.database import get_database
-from .model import VariantType, VariantTypeCreateRequest, VariantTypeUpdateRequest
+from __future__ import annotations
+
 import math
+import uuid
+from dataclasses import dataclass
 
-db = get_database()
-collection = db["variant_type"]
-
-
-async def create_query(item: VariantTypeCreateRequest):
-    data = item.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    data["status"] = "ACTIVE"
-
-    await collection.insert_one(data)
-
-
-async def update_query(id: str, item: VariantTypeUpdateRequest):
-    data = item.model_dump(exclude_unset=True)
-    data["updated_at"] = datetime.utcnow()
-
-    return await collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
+from app.variant_type.repository import (
+    create_product_option,
+    list_product_options,
+    read_product_option_by_id,
+    soft_delete_product_option,
+    update_product_option,
+    count_product_options,
+)
+from app.variant_type.schemas import ProductOptionCreate, ProductOptionRead, ProductOptionUpdate
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
 
 
-async def delete_query(id: str):
-    return await collection.update_one(
-        {"_id": ObjectId(id)}, {"$set": {"status": "DELETED"}}
-    )
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
-async def read_query(params: ParamRequest) -> PaginatedData[VariantType]:
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
+
+
+def _to_read(row) -> ProductOptionRead:
+    return ProductOptionRead.model_validate(row)
+
+
+async def create_query(item: VariantTypeCreateRequest) -> None:
+    payload = ProductOptionCreate.model_validate(item.model_dump())
+    async with get_sessionmaker()() as session:
+        await create_product_option(session, payload)
+        await session.commit()
+
+
+async def update_query(id: str, item: VariantTypeUpdateRequest) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        updated = await update_product_option(
+            session,
+            parsed_id,
+            ProductOptionUpdate.model_validate(item.model_dump(exclude_unset=True)),
+        )
+        if updated is None:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_product_option(session, parsed_id)
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def read_query(params: ParamRequest) -> PaginatedData[ProductOptionRead]:
     page = max(1, params.page)
     size = params.size
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents({"status": {"$ne": "DELETED"}})
+    async with get_sessionmaker()() as session:
+        total_results = await count_product_options(session)
+        rows = await list_product_options(session, offset=offset, limit=size)
+
     total_pages = math.ceil(total_results / size) if size else 1
-    cursor = (
-        collection.find({"status": {"$ne": "DELETED"}})
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
-
     return PaginatedData(
-        data=[VariantType.model_validate(record) for record in records],
+        data=[_to_read(row) for row in rows],
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> VariantType | None:
-    record = await collection.find_one(
-        {"_id": ObjectId(id), "status": {"$ne": "DELETED"}}
-    )
-    if not record:
-        return None
-    return VariantType.model_validate(record)
-
-
+async def read_by_id_query(id: str) -> ProductOptionRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_product_option_by_id(session, parsed_id)
+    return _to_read(row) if row else None

@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Response
+from app.variant_option.schemas import ProductOptionValueRead
 from app.variant_option.model import (
-    VariantOption,
     VariantOptionCreateRequest,
     VariantOptionUpdateRequest,
 )
@@ -34,9 +34,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[VariantOption]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[ProductOptionValueRead]:
     items = await read_query(params)
-    return PaginatedResponse[VariantOption](
+    return PaginatedResponse[ProductOptionValueRead](
         status_code=200,
         message="Successful",
         data=items.data,
@@ -46,9 +46,9 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[VariantOption]
 
 async def read_by_variant_type_service(
     variant_type_id: str, params: ParamRequest
-) -> PaginatedResponse[VariantOption]:
+) -> PaginatedResponse[ProductOptionValueRead]:
     items = await read_by_variant_type_query(variant_type_id, params)
-    return PaginatedResponse[VariantOption](
+    return PaginatedResponse[ProductOptionValueRead](
         status_code=200,
         message="Successful",
         data=items.data,
@@ -56,10 +56,10 @@ async def read_by_variant_type_service(
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[VariantOption]:
+async def read_by_id_service(id: str) -> BaseResponse[ProductOptionValueRead]:
     item = await read_by_id_query(id)
     if item is None:
         raise HTTPException(status_code=404, detail="VariantOption not found")
-    return BaseResponse[VariantOption](status_code=200, message="Successful", data=item)
+    return BaseResponse[ProductOptionValueRead](status_code=200, message="Successful", data=item)
 
 

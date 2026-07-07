@@ -18,6 +18,8 @@ from app.platform_privilege_set import orm as platform_privilege_set_orm  # noqa
 from app.platform_privilege_set_privilege import orm as platform_privilege_set_privilege_orm  # noqa: F401
 from app.platform_user import orm as platform_user_orm  # noqa: F401
 from app.user import orm as user_orm  # noqa: F401
+from app.variant_option import orm as variant_option_orm  # noqa: F401
+from app.variant_type import orm as variant_type_orm  # noqa: F401
 from app.utility.config import get_settings
 from app.utility.orm import Base
 

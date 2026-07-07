@@ -61,7 +61,6 @@ async def create_super_admin_user(email: str, password: str, first_name: str = "
                 PlatformUserCreate(
                     user_id=existing_user.id,
                     platform_privilege_set_id=privilege_set_id,
-                    status="ACTIVE",
                 ),
             )
             await session.commit()
@@ -89,7 +88,6 @@ async def create_super_admin_user(email: str, password: str, first_name: str = "
             PlatformUserCreate(
                 user_id=created_user.id,
                 platform_privilege_set_id=privilege_set_id,
-                status="ACTIVE",
             ),
         )
         await session.commit()

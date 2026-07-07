@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Response
+from app.variant_type.schemas import ProductOptionRead
 from app.variant_type.model import (
-    VariantType,
     VariantTypeCreateRequest,
     VariantTypeUpdateRequest,
 )
@@ -27,9 +27,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[VariantType]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[ProductOptionRead]:
     items = await read_query(params)
-    return PaginatedResponse[VariantType](
+    return PaginatedResponse[ProductOptionRead](
         status_code=200,
         message="Successful",
         data=items.data,
@@ -37,10 +37,10 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[VariantType]:
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[VariantType]:
+async def read_by_id_service(id: str) -> BaseResponse[ProductOptionRead]:
     item = await read_by_id_query(id)
     if item is None:
         raise HTTPException(status_code=404, detail="VariantType not found")
-    return BaseResponse[VariantType](status_code=200, message="Successful", data=item)
+    return BaseResponse[ProductOptionRead](status_code=200, message="Successful", data=item)
 
 

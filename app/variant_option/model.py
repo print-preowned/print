@@ -25,13 +25,13 @@ class VariantOption(BaseModel):
 
 
 class VariantOptionCreateRequest(BaseModel):
-    variant_type_id: PyObjectId
+    variant_type_id: str
     value: str
     status: str = "ACTIVE"
 
 
 class VariantOptionUpdateRequest(BaseModel):
-    variant_type_id: Optional[PyObjectId] = None
+    variant_type_id: Optional[str] = None
     value: Optional[str] = None
     status: Optional[str] = None
 

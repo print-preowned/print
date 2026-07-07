@@ -1,8 +1,5 @@
-from app.variant_type.model import (
-    VariantType,
-    VariantTypeCreateRequest,
-    VariantTypeUpdateRequest,
-)
+from app.variant_type.schemas import ProductOptionRead
+from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
 from .service import (
     delete_service,
     read_service,
@@ -38,13 +35,13 @@ async def read(
     size: int = 5,
     search: str | None = None,
     token: TokenPayload = Depends(require_context("BUSINESS")),
-) -> PaginatedResponse[VariantType]:
+) -> PaginatedResponse[ProductOptionRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[VariantType]:
+async def read_by_id(id: str) -> BaseResponse[ProductOptionRead]:
     return await read_by_id_service(id)
 
 

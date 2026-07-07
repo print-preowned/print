@@ -51,7 +51,13 @@ from app.platform_privilege_set_privilege.repository import (
     create_platform_privilege_set_privilege,
     read_by_privilege_set_and_code,
 )
-from app.platform_privilege_set_privilege.schemas import PlatformPrivilegeSetPrivilegeCreate
+from app.variant_option.repository import (
+    create_product_option_value,
+    read_product_option_value_by_option_and_value,
+)
+from app.variant_option.schemas import ProductOptionValueCreate
+from app.variant_type.repository import create_product_option, read_product_option_by_name
+from app.variant_type.schemas import ProductOptionCreate
 
 VARIANT_TYPES = {
     "Condition": ["New", "Like New", "Very Good", "Good", "Acceptable"],
@@ -214,59 +220,40 @@ async def seed_platform_auth():
 
 
 async def seed_variant_vocabulary():
-    from app.utility.database import get_database
-    from datetime import datetime, timezone
-
     print("\nSeeding variant vocabulary...")
-    db = get_database()
-    type_collection = db["variant_type"]
-    option_collection = db["variant_option"]
-    now = datetime.now(timezone.utc)
     created_types = 0
     created_options = 0
 
-    for type_name, options in VARIANT_TYPES.items():
-        existing_type = await type_collection.find_one(
-            {"name": type_name, "status": {"$ne": "DELETED"}}
-        )
-        if existing_type:
-            type_id = existing_type["_id"]
-            print(f"  - Variant type '{type_name}' already exists")
-        else:
-            result = await type_collection.insert_one(
-                {
-                    "name": type_name,
-                    "status": "ACTIVE",
-                    "created_at": now,
-                    "updated_at": now,
-                }
-            )
-            type_id = result.inserted_id
-            created_types += 1
-            print(f"  ✓ Created variant type: {type_name}")
-
-        for value in options:
-            existing_option = await option_collection.find_one(
-                {
-                    "variant_type_id": type_id,
-                    "value": value,
-                    "status": {"$ne": "DELETED"},
-                }
-            )
-            if existing_option:
-                print(f"    - Option '{value}' already exists")
+    async with get_sessionmaker()() as session:
+        for type_name, options in VARIANT_TYPES.items():
+            existing_type = await read_product_option_by_name(session, type_name)
+            if existing_type:
+                type_id = existing_type.id
+                print(f"  - Variant type '{type_name}' already exists")
             else:
-                await option_collection.insert_one(
-                    {
-                        "variant_type_id": type_id,
-                        "value": value,
-                        "status": "ACTIVE",
-                        "created_at": now,
-                        "updated_at": now,
-                    }
+                created = await create_product_option(session, ProductOptionCreate(name=type_name))
+                type_id = created.id
+                created_types += 1
+                print(f"  ✓ Created variant type: {type_name}")
+
+            for value in options:
+                existing_option = await read_product_option_value_by_option_and_value(
+                    session, type_id, value
                 )
-                created_options += 1
-                print(f"    ✓ Created option: {value}")
+                if existing_option:
+                    print(f"    - Option '{value}' already exists")
+                else:
+                    await create_product_option_value(
+                        session,
+                        ProductOptionValueCreate(
+                            product_option_id=type_id,
+                            value=value,
+                        ),
+                    )
+                    created_options += 1
+                    print(f"    ✓ Created option: {value}")
+
+        await session.commit()
 
     print(f"  Summary: Created {created_types} variant types, {created_options} options")
     return created_types, created_options

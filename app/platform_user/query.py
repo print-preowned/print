@@ -37,7 +37,6 @@ def _to_create(payload: PlatformUserCreateRequest) -> PlatformUserCreate:
     return PlatformUserCreate(
         user_id=uuid.UUID(str(payload.user_id)),
         platform_privilege_set_id=uuid.UUID(str(payload.platform_privilege_set_id)),
-        status=payload.status,
     )
 
 
