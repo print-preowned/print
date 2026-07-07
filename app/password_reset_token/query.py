@@ -1,52 +1,65 @@
-from datetime import datetime, timezone, timedelta
-from typing import Optional
-from bson import ObjectId
-from app.utility.model import PyObjectId
-from app.utility.database import get_database
-from .model import PasswordResetToken
-import hashlib
+from __future__ import annotations
 
-db = get_database()
-collection = db["password_reset_token"]
+import hashlib
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+
+from app.password_reset_token.repository import (
+    create_password_reset_token,
+    mark_password_reset_token_used,
+    read_password_reset_token_by_hash,
+)
+from app.password_reset_token.schemas import PasswordResetTokenCreate, PasswordResetTokenRead
+from app.utility.postgres import get_sessionmaker
+
+
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
 def hash_token(token: str) -> str:
-    """Hash a token using SHA-256"""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def create_query(user_id: PyObjectId, token_hash: str, expires_at: datetime) -> ObjectId:
-    """Create a password reset token with hashed token"""
-    data = {
-        "user_id": ObjectId(user_id),
-        "token_hash": token_hash,
-        "expires_at": expires_at,
-        "used": False,
-        "created_at": datetime.now(timezone.utc),
-        "used_at": None,
-    }
-    result = await collection.insert_one(data)
-    return result.inserted_id
+def _parse_id(value: str | uuid.UUID) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(value)
 
 
-async def read_by_token_hash_query(token_hash: str) -> PasswordResetToken | None:
-    """Find a password reset token by token hash"""
-    record = await collection.find_one({"token_hash": token_hash})
-    if not record:
-        return None
-    return PasswordResetToken.model_validate(record)
+def _to_read(row) -> PasswordResetTokenRead:
+    return PasswordResetTokenRead.model_validate(row)
 
 
-async def mark_as_used_query(id: str):
-    """Mark a password reset token as used"""
-    return await collection.update_one(
-        {"_id": ObjectId(id)},
-        {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}}
-    )
+async def create_query(
+    user_id: str | uuid.UUID,
+    token_hash: str,
+    expires_at: datetime,
+) -> str:
+    async with get_sessionmaker()() as session:
+        created = await create_password_reset_token(
+            session,
+            PasswordResetTokenCreate(
+                user_id=_parse_id(user_id),
+                token_hash=token_hash,
+                expires_at=expires_at,
+            ),
+        )
+        await session.commit()
+        return str(created.id)
 
 
-async def mark_expired_query():
-    """Mark expired tokens (cleanup - optional)"""
-    now = datetime.now(timezone.utc)
-    # This is optional - we check expiration in service layer
-    pass
+async def read_by_token_hash_query(token_hash: str) -> PasswordResetTokenRead | None:
+    async with get_sessionmaker()() as session:
+        row = await read_password_reset_token_by_hash(session, token_hash)
+    return _to_read(row) if row else None
+
+
+async def mark_as_used_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        marked = await mark_password_reset_token_used(session, parsed_id)
+        if not marked:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)

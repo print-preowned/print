@@ -1,9 +1,9 @@
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, Response
 from pwdlib import PasswordHash
+import secrets
 from app.password_reset_token.model import (
     PasswordChangeRequest,
-    PasswordResetToken,
     PasswordResetRequest,
     PasswordResetValidateResponse,
     PasswordResetCompleteRequest,
@@ -16,9 +16,6 @@ from app.password_reset_token.query import (
 )
 from app.user.query import read_by_email_query, update_query
 from app.user.model import UserUpdateRequest
-from app.utility.model import BaseResponse, PyObjectId
-from pwdlib import PasswordHash
-import secrets
 
 
 def generate_reset_token() -> str:

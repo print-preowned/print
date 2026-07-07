@@ -31,6 +31,7 @@ from app.order import orm as order_orm  # noqa: F401
 from app.order_item import orm as order_item_orm  # noqa: F401
 from app.book_rating import orm as book_rating_orm  # noqa: F401
 from app.business_rating import orm as business_rating_orm  # noqa: F401
+from app.password_reset_token import orm as password_reset_token_orm  # noqa: F401
 from app.utility.config import get_settings
 from app.utility.orm import Base
 
