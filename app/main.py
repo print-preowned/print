@@ -30,7 +30,6 @@ from .order_item import controller as orderItemController
 from .variant_type import controller as variantTypeController
 from .variant_option import controller as variantOptionController
 from .variant_config import controller as variantConfigController
-from .entity_image import controller as entityImageController
 from app.module import controller as moduleController
 from app.platform_user import controller as platformUserController
 from app.platform_privilege_set import controller as platformPrivilegeSetController
@@ -161,7 +160,6 @@ app.include_router(orderItemController.router)
 app.include_router(variantTypeController.router)
 app.include_router(variantOptionController.router)
 app.include_router(variantConfigController.router)
-app.include_router(entityImageController.router)
 app.include_router(moduleController.router)
 app.include_router(platformPrivilegeSetController.router)
 app.include_router(platformPrivilegeController.router)
