@@ -14,6 +14,7 @@ from app.password_reset_token.query import (
     mark_as_used_query,
     hash_token,
 )
+from app.utility.authorization import TokenPayload
 from app.user.query import read_by_email_query, update_query
 from app.user.model import UserUpdateRequest
 
@@ -141,7 +142,10 @@ async def complete_password_reset_service(complete_request: PasswordResetComplet
     return Response(status_code=200)
 
 
-async def change_password_service(user_id: str, change_request: PasswordChangeRequest):
+async def change_password_service(
+    token_payload: TokenPayload,
+    change_request: PasswordChangeRequest,
+):
     """
     Change password (authenticated user)
     
@@ -149,12 +153,13 @@ async def change_password_service(user_id: str, change_request: PasswordChangeRe
     - Update to new password
     """
     from app.user.query import read_by_id_query
-    from app.user.model import User
     from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
     from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
     from app.utility.token import create_platform_token
     from app.password_reset_token.model import PasswordChangeResponse
-    
+
+    user_id = token_payload.sub
+
     # Get user
     user = await read_by_id_query(user_id)
     if not user:
@@ -180,7 +185,7 @@ async def change_password_service(user_id: str, change_request: PasswordChangeRe
         await update_query(user_id, UserUpdateRequest(status="ACTIVE"))
 
     new_token: str | None = None
-    if was_new:
+    if token_payload.ctx == "PLATFORM":
         platform_user = await read_platform_user_by_user_id_query(user_id)
         if platform_user:
             privilege_mappings = await read_by_privilege_set_id_query(
@@ -190,7 +195,7 @@ async def change_password_service(user_id: str, change_request: PasswordChangeRe
             updated_user = await read_by_id_query(user_id)
             if updated_user:
                 new_token = create_platform_token(
-                    User.model_validate(updated_user),
+                    updated_user,
                     privileges,
                     password_change_required=False,
                 )

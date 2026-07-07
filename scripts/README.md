@@ -1,136 +1,91 @@
 # Seed Scripts
 
-This directory contains scripts for seeding default data into the database.
+Scripts for bootstrapping a fresh PostgreSQL database after `alembic upgrade head`.
+
+## Cutover order (dev/staging)
+
+```bash
+# 1. Apply schema
+alembic upgrade head
+
+# 2. Reference data (roles, privileges, platform sets, product options)
+python scripts/seed_defaults.py
+
+# 3. Platform bootstrap user (set your own credentials)
+PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py
+
+# 4. Optional catalog CSVs
+python scripts/upload_seeds.py --all
+
+# 5. Optional smoke-test users + business listings (dev)
+python scripts/seed_smoke_test.py
+```
+
+**Prerequisites:** PostgreSQL reachable via `POSTGRES_DSN` (see `.env.example`).
+
+After a reset, all new primary keys should be UUIDv7 (version nibble `7` in the standard string form).
 
 ## seed_defaults.py
 
 Seeds default records for the application:
 
-1. **Roles**
-   - Creates the `OWNER` role (code: "OWNER")
-
-2. **Privileges**
-   - Creates standard CRUD privileges for all modules:
-     - BOOK, AUTHOR, GENRE, BOOK_GENRE, BOOK_AUTHOR, BOOK_RATING
-     - BUSINESS, BUSINESS_BOOK, BUSINESS_USER, BUSINESS_RATING
-     - VARIANT, ORDER, ORDER_ITEM, RATING
-     - USER, ROLE, PRIVILEGE, ROLE_PRIVILEGE
-     - VARIANT_TYPE, VARIANT_OPTION, VARIANT_CONFIG, ENTITY_IMAGE
-   - Note: AUTHOR module does not have DELETE privilege (authors cannot be deleted per MDC-AUTHOR-2)
-
-3. **Role-Privilege Mappings**
-   - Maps all created privileges to the OWNER role
-
-4. **Platform Privileges**
-   - MANAGE_PLATFORM_USERS
-   - MANAGE_PLATFORM_PRIVILEGES
-   - MANAGE_PLATFORM_PRIVILEGE_SETS
-   - VIEW_PLATFORM_ANALYTICS
-   - MANAGE_BUSINESSES
-   - MANAGE_SYSTEM_SETTINGS
-
-5. **Platform Privilege Sets**
-   - Super Admin (all platform privileges)
-   - Admin (MANAGE_PLATFORM_USERS, VIEW_PLATFORM_ANALYTICS, MANAGE_BUSINESSES)
-   - Moderator (VIEW_PLATFORM_ANALYTICS, MANAGE_BUSINESSES)
-
-6. **Platform Privilege Set-Privilege Mappings**
-   - Maps platform privileges to their respective privilege sets
-
-## Usage
+1. **Roles** — `OWNER` role (code: `OWNER`)
+2. **Privileges** — standard CRUD privileges from `app.auth.privilege_catalog`
+3. **Role-privilege mappings** — owner-default privileges mapped to `OWNER`
+4. **Platform privileges** — platform admin catalog
+5. **Platform privilege sets** — Super Admin, Admin, Moderator
+6. **Platform privilege set mappings**
+7. **Product options** — Condition and Format variant vocabulary
 
 ```bash
-# From the project root directory
 python scripts/seed_defaults.py
 ```
 
+Idempotent: skips rows that already exist.
+
 ## seed_super_admin.py
 
-Seeds a platform super admin user for bootstrapping the platform.
+Creates the platform super admin per MDC-PU bootstrap:
 
-Following MDC-PU bootstrap_super_admin:
-- Creates USER with status "NEW" (forces password change on first login)
-- Creates PLATFORM_USER linked to Super Admin privilege set
-- Uses environment variables for admin credentials
-
-### Usage
+- `USER` with status `NEW` (password change on first login)
+- `PLATFORM_USER` linked to the Super Admin privilege set
 
 ```bash
-# From the project root directory
-SUPER_ADMIN_EMAIL=admin@example.com SUPER_ADMIN_PASSWORD=changeme python scripts/seed_super_admin.py
+PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py
 ```
 
-### Optional Environment Variables
+**Required:** `PRINT_SA_EMAIL`, `PRINT_SA_PASSWORD`
 
-- `SUPER_ADMIN_EMAIL` (required): Email address for the super admin user
-- `SUPER_ADMIN_PASSWORD` (required): Initial password (user will be forced to change on first login)
-- `SUPER_ADMIN_FIRST_NAME` (optional, default: "Super"): First name for the super admin
-- `SUPER_ADMIN_LAST_NAME` (optional, default: "Admin"): Last name for the super admin
+**Optional:** `PRINT_SA_FNAME` (default: Super), `PRINT_SA_LNAME` (default: Admin)
 
-### Prerequisites
-
-- Must run `seed_defaults.py` first to create the Super Admin privilege set
-- MongoDB must be running and accessible
-
-### Notes
-
-- The script is idempotent - if a user with the email already exists, it will check if they have a platform_user record
-- If user exists but no platform_user, it will create the platform_user record
-- User status is set to "NEW" to force password change on first login (per MDC-PU bootstrap_super_admin)
+Run `seed_defaults.py` first.
 
 ## upload_seeds.py
 
-Uploads seed data from CSV files directly to the database. Supports uploading books, authors, and genres.
-
-### Usage
+Uploads catalog data from CSV via Postgres repositories (genres, authors, books).
 
 ```bash
-# Upload a specific type
 python scripts/upload_seeds.py --type authors --file scripts/seeds/authors.csv
 python scripts/upload_seeds.py --type genres --file scripts/seeds/genres.csv
 python scripts/upload_seeds.py --type books --file scripts/seeds/books.csv
-
-# Upload all seed files
 python scripts/upload_seeds.py --all
 ```
 
-### CSV File Format
+CSV files live in `scripts/seeds/`. Upload genres before books. Re-running `--all` creates duplicates — use on a fresh DB only.
 
-**authors.csv:**
-- Columns: `first_name`, `last_name`, `middle_name` (optional), `about`, `image` (optional), `status` (optional, default: ACTIVE)
+## seed_smoke_test.py
 
-**genres.csv:**
-- Columns: `name`, `description` (optional), `status` (optional, default: ACTIVE)
+Creates dev smoke-test accounts and a minimal marketplace slice:
 
-**books.csv:**
-- Columns: `title`, `genres` (comma-separated), `image`, `synopsis`, `status` (optional, default: ACTIVE)
+1. **Seller** — customer user with an owned business, ACTIVE business-book listings, and catalog variants
+2. **Customer** — plain customer user (no business)
 
-### Seed Files Location
+```bash
+python scripts/seed_smoke_test.py
+```
 
-Seed CSV files are located in `scripts/seeds/`:
-- `scripts/seeds/authors.csv` - Sample author data (10 authors)
-- `scripts/seeds/genres.csv` - Sample genre data (15 genres)
-- `scripts/seeds/books.csv` - Sample book data (15 books)
+**Optional:** `PRINT_ST_SELLER_EMAIL`, `PRINT_ST_SELLER_PASSWORD`, `PRINT_ST_CUSTOMER_EMAIL`, `PRINT_ST_CUSTOMER_PASSWORD`, `PRINT_ST_BUSINESS_NAME`
 
-### Prerequisites
+Defaults: `seller@example.com` / `customer@example.com` with password `changeme`.
 
-- Python 3.8+
-- MongoDB must be running and accessible
-- Database connection configured (via environment variables or config)
-
-### Notes
-
-- The script uploads records directly to the database (no API required)
-- No authentication token needed - connects directly to MongoDB
-- Failed uploads are reported with row numbers and error messages
-- The script is idempotent - running it multiple times will create duplicate records (use with caution)
-- Books should be uploaded after genres and authors (books may reference genres)
-- Data is validated using Pydantic models before insertion
-
-## General Notes
-
-- The scripts are idempotent - they check for existing records before creating new ones
-- If a record already exists, they will skip creation and log a message
-- The scripts will create missing mappings even if some records already exist
-- Make sure MongoDB is running and accessible before running the scripts
-- Run `seed_defaults.py` before `seed_super_admin.py`
+Run after `seed_defaults.py` and `upload_seeds.py --all`. Idempotent: skips existing users, business, listings, and variants.

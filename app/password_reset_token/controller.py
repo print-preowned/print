@@ -71,4 +71,4 @@ async def change_password(
     - If user status is "NEW", updates to "ACTIVE"
     - Works for both client and platform users
     """
-    return await change_password_service(token.sub, change_request)
+    return await change_password_service(token, change_request)

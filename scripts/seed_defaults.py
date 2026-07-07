@@ -51,6 +51,7 @@ from app.platform_privilege_set_privilege.repository import (
     create_platform_privilege_set_privilege,
     read_by_privilege_set_and_code,
 )
+from app.platform_privilege_set_privilege.schemas import PlatformPrivilegeSetPrivilegeCreate
 from app.variant_option.repository import (
     create_product_option_value,
     read_product_option_value_by_option_and_value,
