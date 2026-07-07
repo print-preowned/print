@@ -1,8 +1,5 @@
-from app.role_privilege.model import (
-    RolePrivilege,
-    RolePrivilegeCreateRequest,
-    RolePrivilegeUpdateRequest,
-)
+from app.role_privilege.model import RolePrivilegeCreateRequest, RolePrivilegeUpdateRequest
+from app.role_privilege.schemas import RolePrivilegeRead
 from .service import (
     delete_service,
     read_service,
@@ -34,13 +31,13 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[RolePrivilege]:
+) -> PaginatedResponse[RolePrivilegeRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[RolePrivilege]:
+async def read_by_id(id: str) -> BaseResponse[RolePrivilegeRead]:
     return await read_by_id_service(id)
 
 

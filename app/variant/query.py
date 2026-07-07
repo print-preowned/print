@@ -139,13 +139,14 @@ async def read_by_business_book_id_query(
             business_book_id=parsed_bb_id,
         )
         config_map = await resolve_configs_for_variants(session, [row.id for row in rows])
+        data = [
+            _to_variant_with_config(row, config_map.get(row.id, []))
+            for row in rows
+        ]
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
-        data=[
-            _to_variant_with_config(row, config_map.get(row.id, []))
-            for row in rows
-        ],
+        data=data,
         pagination=Pagination(
             page=page,
             size=size,

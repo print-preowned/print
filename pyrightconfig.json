@@ -99,6 +99,10 @@
     "app/book_genre/repository.py",
     "app/book_genre/schemas.py",
     "app/book_genre/query.py",
+    "app/role/query.py",
+    "app/privilege/query.py",
+    "app/role_privilege/query.py",
+    "app/business_book/query.py",
     "app/role/service.py",
     "tests/**/*.py"
   ],

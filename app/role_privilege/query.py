@@ -1,109 +1,139 @@
-from datetime import datetime, timezone
-from typing import List
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest
-from ..utility.database import get_database
-from .model import RolePrivilege, RolePrivilegeCreateRequest, RolePrivilegeUpdateRequest
+from __future__ import annotations
+
 import math
+import uuid
+from dataclasses import dataclass
 
-db = get_database()
-collection = db["role_privilege"]
+from app.role_privilege.model import RolePrivilegeCreateRequest, RolePrivilegeUpdateRequest
+from app.role_privilege.repository import (
+    count_role_privileges,
+    create_role_privilege,
+    list_role_privileges,
+    read_by_privilege_code,
+    read_privilege_codes_by_role_id,
+    read_role_privilege_by_id,
+    read_role_privilege_by_role_and_code,
+    soft_delete_by_role_and_code,
+    soft_delete_role_privilege,
+    update_role_privilege,
+)
+from app.role_privilege.schemas import RolePrivilegeCreate, RolePrivilegeRead, RolePrivilegeUpdate
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
 
 
-async def create_query(mapping: RolePrivilegeCreateRequest):
-    data = mapping.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    data["status"] = "ACTIVE"
-
-    await collection.insert_one(data)
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
-async def update_query(id: str, mapping: RolePrivilegeUpdateRequest):
-    data = mapping.model_dump(exclude_unset=True)
-    data["updated_at"] = datetime.utcnow()
-
-    return await collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def delete_query(id: str):
-    return await collection.update_one(
-        {"_id": ObjectId(id)}, {"$set": {"status": "DELETED"}}
+def _to_read(row) -> RolePrivilegeRead:
+    return RolePrivilegeRead.model_validate(row)
+
+
+async def create_query(mapping: RolePrivilegeCreateRequest) -> None:
+    payload = RolePrivilegeCreate(
+        role_id=_parse_id(mapping.role_id),
+        privilege_code=mapping.privilege_code,
     )
+    async with get_sessionmaker()() as session:
+        await create_role_privilege(session, payload)
+        await session.commit()
 
 
-async def read_query(params: ParamRequest) -> PaginatedData[RolePrivilege]:
+async def update_query(id: str, mapping: RolePrivilegeUpdateRequest) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    update_data = mapping.model_dump(exclude_unset=True)
+    if "role_id" in update_data and update_data["role_id"] is not None:
+        update_data["role_id"] = _parse_id(update_data["role_id"])
+
+    async with get_sessionmaker()() as session:
+        updated = await update_role_privilege(
+            session,
+            parsed_id,
+            RolePrivilegeUpdate.model_validate(update_data),
+        )
+        if updated is None:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_role_privilege(session, parsed_id)
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_by_role_and_privilege_query(role_id: str, privilege_code: str) -> UpdateResult:
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_by_role_and_code(
+            session,
+            _parse_id(role_id),
+            privilege_code,
+        )
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def read_query(params: ParamRequest) -> PaginatedData[RolePrivilegeRead]:
     page = max(1, params.page)
     size = params.size
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents({"status": {"$ne": "DELETED"}})
+    async with get_sessionmaker()() as session:
+        total_results = await count_role_privileges(session)
+        rows = await list_role_privileges(session, offset=offset, limit=size)
+        data = [_to_read(row) for row in rows]
+
     total_pages = math.ceil(total_results / size) if size else 1
-    cursor = (
-        collection.find({"status": {"$ne": "DELETED"}})
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
-
     return PaginatedData(
-        data=[RolePrivilege.model_validate(record) for record in records],
+        data=data,
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> RolePrivilege | None:
-    record = await collection.find_one(
-        {"_id": ObjectId(id), "status": {"$ne": "DELETED"}}
-    )
-    if not record:
-        return None
-    return RolePrivilege.model_validate(record)
+async def read_by_id_query(id: str) -> RolePrivilegeRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_role_privilege_by_id(session, parsed_id)
+    return _to_read(row) if row else None
 
 
-async def read_by_role_and_privilege_query(role_id: str, privilege_code: str) -> RolePrivilege | None:
-    """Find a role_privilege mapping by role_id and privilege_code"""
-    record = await collection.find_one(
-        {
-            "role_id": ObjectId(role_id),
-            "privilege_code": privilege_code,
-            "status": {"$ne": "DELETED"}
-        }
-    )
-    if not record:
-        return None
-    return RolePrivilege.model_validate(record)
+async def read_by_role_and_privilege_query(
+    role_id: str,
+    privilege_code: str,
+) -> RolePrivilegeRead | None:
+    async with get_sessionmaker()() as session:
+        row = await read_role_privilege_by_role_and_code(
+            session,
+            _parse_id(role_id),
+            privilege_code,
+        )
+    return _to_read(row) if row else None
 
 
-async def read_by_privilege_code_query(privilege_code: str) -> List[RolePrivilege]:
-    """Find all role_privilege mappings for a privilege code"""
-    cursor = collection.find(
-        {"privilege_code": privilege_code, "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [RolePrivilege.model_validate(record) for record in records]
+async def read_by_privilege_code_query(privilege_code: str) -> list[RolePrivilegeRead]:
+    async with get_sessionmaker()() as session:
+        rows = await read_by_privilege_code(session, privilege_code)
+    return [_to_read(row) for row in rows]
 
 
-async def read_privilege_codes_by_role_id_query(role_id: str) -> List[str]:
-    """Return privilege codes for a role (for token materialization)."""
-    cursor = collection.find(
-        {"role_id": ObjectId(role_id), "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [r["privilege_code"] for r in records]
-
-
-async def delete_by_role_and_privilege_query(role_id: str, privilege_code: str):
-    """Delete a role_privilege mapping by role_id and privilege_code"""
-    return await collection.update_one(
-        {
-            "role_id": ObjectId(role_id),
-            "privilege_code": privilege_code,
-            "status": {"$ne": "DELETED"}
-        },
-        {"$set": {"status": "DELETED"}}
-    )
-
-
+async def read_privilege_codes_by_role_id_query(role_id: str) -> list[str]:
+    async with get_sessionmaker()() as session:
+        return await read_privilege_codes_by_role_id(session, _parse_id(role_id))

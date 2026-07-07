@@ -12,6 +12,15 @@ class PrivilegeCreate(BaseModel):
     module_name: str
 
 
+class PrivilegeUpdate(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    module_name: str | None = None
+    status: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PrivilegeRead(BaseModel):
     id: uuid.UUID
     code: str

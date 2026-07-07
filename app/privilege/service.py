@@ -1,5 +1,6 @@
 from fastapi import HTTPException, Response
-from app.privilege.model import Privilege, PrivilegeCreateRequest, PrivilegeUpdateRequest
+from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
+from app.privilege.schemas import PrivilegeRead
 from .query import delete_query, read_query, read_by_id_query, create_query, update_query
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
@@ -23,9 +24,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[Privilege]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[PrivilegeRead]:
     privileges = await read_query(params)
-    return PaginatedResponse[Privilege](
+    return PaginatedResponse[PrivilegeRead](
         status_code=200,
         message="Successful",
         data=privileges.data,
@@ -33,10 +34,10 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[Privilege]:
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[Privilege]:
+async def read_by_id_service(id: str) -> BaseResponse[PrivilegeRead]:
     privilege = await read_by_id_query(id)
     if privilege is None:
         raise HTTPException(status_code=404, detail="Privilege not found")
-    return BaseResponse[Privilege](status_code=200, message="Successful", data=privilege)
+    return BaseResponse[PrivilegeRead](status_code=200, message="Successful", data=privilege)
 
 

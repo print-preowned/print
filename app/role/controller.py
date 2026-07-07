@@ -1,4 +1,5 @@
-from app.role.model import Role, RoleCreateRequest, RoleUpdateRequest
+from app.role.model import RoleCreateRequest, RoleUpdateRequest
+from app.role.schemas import RoleRead
 from .service import (
     delete_service,
     read_service,
@@ -30,13 +31,13 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[Role]:
+) -> PaginatedResponse[RoleRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[Role]:
+async def read_by_id(id: str) -> BaseResponse[RoleRead]:
     return await read_by_id_service(id)
 
 

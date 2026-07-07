@@ -62,9 +62,8 @@ async def create_module_service(request: ModuleCreateRequest) -> Response:
             existing_mapping = await read_by_role_and_privilege_query(role_id_str, privilege_code)
             if not existing_mapping:
                 mapping = RolePrivilegeCreateRequest(
-                    role_id=owner_role_id,
+                    role_id=str(owner_role_id),
                     privilege_code=privilege_code,
-                    status="ACTIVE",
                 )
                 await role_privilege_create_query(mapping)
             continue
@@ -79,9 +78,8 @@ async def create_module_service(request: ModuleCreateRequest) -> Response:
         await privilege_create_query(privilege_data)
 
         mapping = RolePrivilegeCreateRequest(
-            role_id=owner_role_id,
+            role_id=str(owner_role_id),
             privilege_code=privilege_code,
-            status="ACTIVE",
         )
         await role_privilege_create_query(mapping)
 
@@ -140,9 +138,8 @@ async def update_module_service(request: ModuleUpdateRequest) -> Response:
         if not existing_mapping:
             # Create role_privilege mapping for owner role
             mapping = RolePrivilegeCreateRequest(
-                role_id=owner_role_id,
+                role_id=str(owner_role_id),
                 privilege_code=privilege.code,
-                status="ACTIVE"
             )
             await role_privilege_create_query(mapping)
     

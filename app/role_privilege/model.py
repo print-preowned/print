@@ -25,13 +25,12 @@ class RolePrivilege(BaseModel):
 
 
 class RolePrivilegeCreateRequest(BaseModel):
-    role_id: PyObjectId
+    role_id: str
     privilege_code: str
-    status: str = "ACTIVE"
 
 
 class RolePrivilegeUpdateRequest(BaseModel):
-    role_id: Optional[PyObjectId] = None
+    role_id: str | None = None
     privilege_code: Optional[str] = None
     status: Optional[str] = None
 

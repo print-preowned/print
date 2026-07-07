@@ -12,6 +12,14 @@ class RoleCreate(BaseModel):
     description: str | None = None
 
 
+class RoleUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RoleRead(BaseModel):
     id: uuid.UUID
     name: str

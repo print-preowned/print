@@ -1,9 +1,6 @@
 from fastapi import HTTPException, Response
-from app.role_privilege.model import (
-    RolePrivilege,
-    RolePrivilegeCreateRequest,
-    RolePrivilegeUpdateRequest,
-)
+from app.role_privilege.model import RolePrivilegeCreateRequest, RolePrivilegeUpdateRequest
+from app.role_privilege.schemas import RolePrivilegeRead
 from .query import delete_query, read_query, read_by_id_query, create_query, update_query
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
@@ -27,9 +24,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[RolePrivilege]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[RolePrivilegeRead]:
     mappings = await read_query(params)
-    return PaginatedResponse[RolePrivilege](
+    return PaginatedResponse[RolePrivilegeRead](
         status_code=200,
         message="Successful",
         data=mappings.data,
@@ -37,10 +34,10 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[RolePrivilege]
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[RolePrivilege]:
+async def read_by_id_service(id: str) -> BaseResponse[RolePrivilegeRead]:
     mapping = await read_by_id_query(id)
     if mapping is None:
         raise HTTPException(status_code=404, detail="Mapping not found")
-    return BaseResponse[RolePrivilege](status_code=200, message="Successful", data=mapping)
+    return BaseResponse[RolePrivilegeRead](status_code=200, message="Successful", data=mapping)
 
 

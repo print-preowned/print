@@ -4,7 +4,7 @@ import math
 import uuid
 from dataclasses import dataclass
 
-from app.book.repository import read_book_by_id
+from app.book.repository import read_book_by_id, read_books_by_ids
 from app.business_book.model import (
     BusinessBookCreateRequest,
     BusinessBookUpdateRequest,
@@ -23,8 +23,13 @@ from app.business_book.schemas import BusinessBookCreate, BusinessBookRead, Busi
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
 from app.variant.model import VariantWithConfig
-from app.variant.query import read_by_business_book_id_query
-from app.variant.repository import soft_delete_variants_by_business_book, variant_summary_for_business_books
+from app.variant.schemas import VariantRead, VariantWithConfigRead
+from app.variant.repository import (
+    list_variants,
+    resolve_configs_for_variants,
+    soft_delete_variants_by_business_book,
+    variant_summary_for_business_books,
+)
 
 
 @dataclass
@@ -124,11 +129,12 @@ async def read_by_business_id_query(
         )
         bb_ids = [row.id for row in rows]
         summaries = await variant_summary_for_business_books(session, bb_ids)
+        books = await read_books_by_ids(session, [row.book_id for row in rows])
+        book_by_id = {book.id: book for book in books}
 
-    data: list[BusinessBookWithVariantSummary] = []
-    async with get_sessionmaker()() as session:
+        data: list[BusinessBookWithVariantSummary] = []
         for row in rows:
-            book = await read_book_by_id(session, row.book_id)
+            book = book_by_id.get(row.book_id)
             summary = summaries.get(str(row.id), {})
             data.append(
                 BusinessBookWithVariantSummary(
@@ -167,21 +173,40 @@ async def read_by_id_with_variants_query(id: str) -> BusinessBookWithVariants | 
         if row is None:
             return None
         book = await read_book_by_id(session, row.book_id)
-
-    listing = BusinessBookWithVariants(
-        **_to_read(row).model_dump(mode="json"),
-        book_title=book.title if book else None,
-        book_image=book.image if book else None,
-        variants=[],
-    )
-    variants_page = await read_by_business_book_id_query(id, ParamRequest(page=1, size=100))
-    listing.variants = [
-        VariantWithConfig.model_validate(
-            {
-                **variant.model_dump(mode="json"),
-                "config": [config.model_dump() for config in variant.config],
-            }
+        variant_rows = await list_variants(
+            session,
+            offset=0,
+            limit=100,
+            business_book_id=parsed_id,
         )
-        for variant in variants_page.data
-    ]
-    return listing
+        config_map = await resolve_configs_for_variants(session, [variant.id for variant in variant_rows])
+
+        variants: list[VariantWithConfig] = []
+        for variant_row in variant_rows:
+            variant_read = VariantWithConfigRead(
+                **VariantRead.model_validate(variant_row).model_dump(),
+                config=config_map.get(variant_row.id, []),
+            )
+            variants.append(
+                VariantWithConfig.model_validate(
+                    {
+                        **variant_read.model_dump(mode="json"),
+                        "id": str(variant_read.id),
+                        "business_book_id": str(variant_read.business_book_id),
+                        "price": float(variant_read.price),
+                        "discount": (
+                            float(variant_read.discount)
+                            if variant_read.discount is not None
+                            else None
+                        ),
+                        "config": [config.model_dump() for config in variant_read.config],
+                    }
+                )
+            )
+
+        return BusinessBookWithVariants(
+            **_to_read(row).model_dump(mode="json"),
+            book_title=book.title if book else None,
+            book_image=book.image if book else None,
+            variants=variants,
+        )

@@ -1,7 +1,7 @@
 from fastapi import HTTPException, Response
-from app.role.model import Role, RoleCreateRequest, RoleUpdateRequest, OWNER_ROLE_CODE
-from app.role.repository import read_role_by_code
+from app.role.model import RoleCreateRequest, RoleUpdateRequest, OWNER_ROLE_CODE
 from app.role.schemas import RoleRead
+from app.role.repository import read_role_by_code
 from app.utility.postgres import get_sessionmaker
 from .query import delete_query, read_query, read_by_id_query, create_query, update_query
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
@@ -26,9 +26,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[Role]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[RoleRead]:
     roles = await read_query(params)
-    return PaginatedResponse[Role](
+    return PaginatedResponse[RoleRead](
         status_code=200,
         message="Successful",
         data=roles.data,
@@ -36,11 +36,11 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[Role]:
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[Role]:
+async def read_by_id_service(id: str) -> BaseResponse[RoleRead]:
     role = await read_by_id_query(id)
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")
-    return BaseResponse[Role](status_code=200, message="Successful", data=role)
+    return BaseResponse[RoleRead](status_code=200, message="Successful", data=role)
 
 
 async def read_owner_role_service() -> BaseResponse[RoleRead | None]:

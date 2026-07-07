@@ -1,4 +1,5 @@
-from app.privilege.model import Privilege, PrivilegeCreateRequest, PrivilegeUpdateRequest
+from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
+from app.privilege.schemas import PrivilegeRead
 from .service import (
     delete_service,
     read_service,
@@ -30,13 +31,13 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[Privilege]:
+) -> PaginatedResponse[PrivilegeRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[Privilege]:
+async def read_by_id(id: str) -> BaseResponse[PrivilegeRead]:
     return await read_by_id_service(id)
 
 
