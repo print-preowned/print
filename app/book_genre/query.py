@@ -1,103 +1,139 @@
-from datetime import datetime, timezone
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest
-from ..utility.database import get_database
-from .model import BookGenre, BookGenreCreateRequest, BookGenreUpdateRequest
+from __future__ import annotations
+
 import math
+import uuid
+from dataclasses import dataclass
 
-db = get_database()
-collection = db["book_genre"]
+from app.book_genre.model import BookGenreCreateRequest, BookGenreUpdateRequest
+from app.book_genre.repository import (
+    count_book_genres,
+    create_book_genre,
+    list_book_genres,
+    read_book_genre_by_id,
+    read_by_book_id,
+    read_by_book_ids,
+    read_by_genre_id,
+    soft_delete_book_genre,
+    soft_delete_by_book_and_genre,
+    update_book_genre,
+)
+from app.book_genre.schemas import BookGenreCreate, BookGenreRead, BookGenreUpdate
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
 
 
-async def create_query(mapping: BookGenreCreateRequest):
-    data = mapping.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    data["status"] = "ACTIVE"
-
-    await collection.insert_one(data)
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
-async def update_query(id: str, mapping: BookGenreUpdateRequest):
-    data = mapping.model_dump(exclude_unset=True)
-    data["updated_at"] = datetime.utcnow()
-
-    return await collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def delete_query(id: str):
-    return await collection.update_one(
-        {"_id": ObjectId(id)}, {"$set": {"status": "DELETED"}}
+def _to_read(row) -> BookGenreRead:
+    return BookGenreRead.model_validate(row)
+
+
+async def create_query(mapping: BookGenreCreateRequest) -> None:
+    payload = BookGenreCreate(
+        book_id=_parse_id(mapping.book_id),
+        genre_id=_parse_id(mapping.genre_id),
     )
+    async with get_sessionmaker()() as session:
+        await create_book_genre(session, payload)
+        await session.commit()
 
 
-async def delete_by_book_and_genre_query(book_id: str, genre_id: str):
-    return await collection.update_one(
-        {
-            "book_id": ObjectId(book_id),
-            "genre_id": ObjectId(genre_id),
-            "status": {"$ne": "DELETED"},
-        },
-        {"$set": {"status": "DELETED", "updated_at": datetime.now(timezone.utc)}},
-    )
+async def update_query(id: str, mapping: BookGenreUpdateRequest) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    update_data = mapping.model_dump(exclude_unset=True)
+    if "book_id" in update_data and update_data["book_id"] is not None:
+        update_data["book_id"] = _parse_id(update_data["book_id"])
+    if "genre_id" in update_data and update_data["genre_id"] is not None:
+        update_data["genre_id"] = _parse_id(update_data["genre_id"])
+
+    async with get_sessionmaker()() as session:
+        updated = await update_book_genre(
+            session,
+            parsed_id,
+            BookGenreUpdate.model_validate(update_data),
+        )
+        if updated is None:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
 
 
-async def read_query(params: ParamRequest) -> PaginatedData[BookGenre]:
+async def delete_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_book_genre(session, parsed_id)
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_by_book_and_genre_query(book_id: str, genre_id: str) -> UpdateResult:
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_by_book_and_genre(
+            session,
+            _parse_id(book_id),
+            _parse_id(genre_id),
+        )
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def read_query(params: ParamRequest) -> PaginatedData[BookGenreRead]:
     page = max(1, params.page)
     size = params.size
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents({"status": {"$ne": "DELETED"}})
+    async with get_sessionmaker()() as session:
+        total_results = await count_book_genres(session)
+        rows = await list_book_genres(session, offset=offset, limit=size)
+
     total_pages = math.ceil(total_results / size) if size else 1
-    cursor = (
-        collection.find({"status": {"$ne": "DELETED"}})
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
-
     return PaginatedData(
-        data=[BookGenre.model_validate(record) for record in records],
+        data=[_to_read(row) for row in rows],
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> BookGenre | None:
-    record = await collection.find_one(
-        {"_id": ObjectId(id), "status": {"$ne": "DELETED"}}
-    )
-    if not record:
+async def read_by_id_query(id: str) -> BookGenreRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_book_genre_by_id(session, parsed_id)
+    if row is None:
         return None
-    return BookGenre.model_validate(record)
+    return _to_read(row)
 
 
-async def read_by_book_id_query(book_id: str) -> list[BookGenre]:
-    cursor = collection.find(
-        {"book_id": ObjectId(book_id), "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [BookGenre.model_validate(record) for record in records]
+async def read_by_book_id_query(book_id: str) -> list[BookGenreRead]:
+    async with get_sessionmaker()() as session:
+        rows = await read_by_book_id(session, _parse_id(book_id))
+    return [_to_read(row) for row in rows]
 
 
-async def read_by_book_ids_query(book_ids: list[str]) -> list[BookGenre]:
-    """Return all book-genre links for any of the given book ids (for batch population)."""
+async def read_by_book_ids_query(book_ids: list[str]) -> list[BookGenreRead]:
     if not book_ids:
         return []
-    oids = [ObjectId(bid) for bid in book_ids]
-    cursor = collection.find(
-        {"book_id": {"$in": oids}, "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [BookGenre.model_validate(record) for record in records]
+    parsed_ids = [_parse_id(book_id) for book_id in book_ids]
+    async with get_sessionmaker()() as session:
+        rows = await read_by_book_ids(session, parsed_ids)
+    return [_to_read(row) for row in rows]
 
 
-async def read_by_genre_id_query(genre_id: str) -> list[BookGenre]:
-    cursor = collection.find(
-        {"genre_id": ObjectId(genre_id), "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [BookGenre.model_validate(record) for record in records]
-
-
+async def read_by_genre_id_query(genre_id: str) -> list[BookGenreRead]:
+    async with get_sessionmaker()() as session:
+        rows = await read_by_genre_id(session, _parse_id(genre_id))
+    return [_to_read(row) for row in rows]

@@ -1,8 +1,5 @@
-from app.book_genre.model import (
-    BookGenre,
-    BookGenreCreateRequest,
-    BookGenreUpdateRequest,
-)
+from app.book_genre.model import BookGenreCreateRequest, BookGenreUpdateRequest
+from app.book_genre.schemas import BookGenreRead
 from .service import (
     delete_service,
     delete_by_book_and_genre_service,
@@ -42,23 +39,23 @@ async def delete_by_book_and_genre(book_id: str, genre_id: str) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[BookGenre]:
+) -> PaginatedResponse[BookGenreRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[BookGenre]:
+async def read_by_id(id: str) -> BaseResponse[BookGenreRead]:
     return await read_by_id_service(id)
 
 
 @router.get("/read/by-book/{book_id}")
-async def read_by_book_id(book_id: str) -> BaseResponse[list[BookGenre]]:
+async def read_by_book_id(book_id: str) -> BaseResponse[list[BookGenreRead]]:
     return await read_by_book_id_service(book_id)
 
 
 @router.get("/read/by-genre/{genre_id}")
-async def read_by_genre_id(genre_id: str) -> BaseResponse[list[BookGenre]]:
+async def read_by_genre_id(genre_id: str) -> BaseResponse[list[BookGenreRead]]:
     return await read_by_genre_id_service(genre_id)
 
 

@@ -1,7 +1,6 @@
 from collections import defaultdict
 import uuid
 
-from bson import ObjectId
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
 from app.author.schemas import AuthorRead
@@ -48,20 +47,7 @@ from app.book_genre.query import (
 )
 from app.author.query import read_by_ids_query as read_authors_by_ids
 from app.genre.query import read_by_ids_query as read_genres_by_ids
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
-
-
-def _object_ids(ids: list[str], field_name: str) -> list[ObjectId]:
-    result: list[ObjectId] = []
-    for value in ids:
-        try:
-            result.append(ObjectId(value))
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid {field_name}: {value}",
-            ) from exc
-    return result
+from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 
 def _validate_uuids(ids: list[str], field_name: str) -> None:
@@ -101,8 +87,8 @@ async def _sync_book_links(
     for genre_id in target_genre_ids - existing_genre_ids:
         await create_book_genre_query(
             BookGenreCreateRequest(
-                book_id=PyObjectId(book_id),
-                genre_id=PyObjectId(genre_id),
+                book_id=book_id,
+                genre_id=genre_id,
             )
         )
 
@@ -140,7 +126,7 @@ async def create_service(book: BookCreateRequest) -> Response:
                 raise HTTPException(status_code=500, detail="Failed to save book image")
 
         _validate_uuids(book.author_ids, "author_id")
-        _object_ids(book.genre_ids, "genre_id")
+        _validate_uuids(book.genre_ids, "genre_id")
         await _sync_book_links(book_id, book.author_ids, book.genre_ids)
     except HTTPException:
         await _rollback_book_creation(book_id, final_image)
@@ -187,7 +173,7 @@ async def update_service(id: str, book: BookUpdateRequest) -> Response:
             else [str(link.genre_id) for link in genre_links]
         )
         _validate_uuids(next_author_ids, "author_id")
-        _object_ids(next_genre_ids, "genre_id")
+        _validate_uuids(next_genre_ids, "genre_id")
         await _sync_book_links(id, next_author_ids, next_genre_ids)
 
     return Response(status_code=200)

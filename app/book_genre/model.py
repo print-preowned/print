@@ -29,14 +29,13 @@ class BookGenre(BaseAppModel):
 
 
 class BookGenreCreateRequest(BaseModel):
-    book_id: PyObjectId
-    genre_id: PyObjectId
-    status: str = "ACTIVE"
+    book_id: str
+    genre_id: str
 
 
 class BookGenreUpdateRequest(BaseModel):
-    book_id: Optional[PyObjectId] = None
-    genre_id: Optional[PyObjectId] = None
+    book_id: str | None = None
+    genre_id: str | None = None
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")

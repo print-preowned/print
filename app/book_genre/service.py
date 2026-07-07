@@ -1,9 +1,6 @@
 from fastapi import HTTPException, Response
-from app.book_genre.model import (
-    BookGenre,
-    BookGenreCreateRequest,
-    BookGenreUpdateRequest,
-)
+from app.book_genre.model import BookGenreCreateRequest, BookGenreUpdateRequest
+from app.book_genre.schemas import BookGenreRead
 from .query import (
     delete_query,
     delete_by_book_and_genre_query,
@@ -52,9 +49,9 @@ async def delete_by_book_and_genre_service(
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[BookGenre]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[BookGenreRead]:
     mappings = await read_query(params)
-    response = PaginatedResponse[BookGenre](
+    response = PaginatedResponse[BookGenreRead](
         status_code=200,
         message="Successful",
         data=mappings.data,
@@ -64,26 +61,26 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[BookGenre]:
     return response
 
 
-async def read_by_id_service(id: str) -> BaseResponse[BookGenre]:
+async def read_by_id_service(id: str) -> BaseResponse[BookGenreRead]:
     mapping = await read_by_id_query(id)
 
     if mapping is None:
         raise HTTPException(status_code=404, detail="Mapping not found")
 
-    response = BaseResponse[BookGenre](
+    response = BaseResponse[BookGenreRead](
         status_code=200, message="Successful", data=mapping
     )
 
     return response
 
 
-async def read_by_book_id_service(book_id: str) -> BaseResponse[list[BookGenre]]:
+async def read_by_book_id_service(book_id: str) -> BaseResponse[list[BookGenreRead]]:
     data = await read_by_book_id_query(book_id)
-    return BaseResponse[list[BookGenre]](status_code=200, message="Successful", data=data)
+    return BaseResponse[list[BookGenreRead]](status_code=200, message="Successful", data=data)
 
 
-async def read_by_genre_id_service(genre_id: str) -> BaseResponse[list[BookGenre]]:
+async def read_by_genre_id_service(genre_id: str) -> BaseResponse[list[BookGenreRead]]:
     data = await read_by_genre_id_query(genre_id)
-    return BaseResponse[list[BookGenre]](status_code=200, message="Successful", data=data)
+    return BaseResponse[list[BookGenreRead]](status_code=200, message="Successful", data=data)
 
 

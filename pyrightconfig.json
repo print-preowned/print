@@ -94,6 +94,11 @@
     "app/book_author/repository.py",
     "app/book_author/schemas.py",
     "app/book_author/query.py",
+    "alembic/versions/20260707_0009_create_book_genres.py",
+    "app/book_genre/orm.py",
+    "app/book_genre/repository.py",
+    "app/book_genre/schemas.py",
+    "app/book_genre/query.py",
     "app/role/service.py",
     "tests/**/*.py"
   ],
