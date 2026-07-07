@@ -31,16 +31,15 @@ class BookRating(BaseModel):
 
 
 class BookRatingCreateRequest(BaseModel):
-    book_id: PyObjectId
-    user_id: PyObjectId
+    book_id: str
+    user_id: str
     rating: int
     review: Optional[str] = None
-    status: str = "ACTIVE"
 
 
 class BookRatingUpdateRequest(BaseModel):
-    book_id: Optional[PyObjectId] = None
-    user_id: Optional[PyObjectId] = None
+    book_id: str | None = None
+    user_id: str | None = None
     rating: Optional[int] = None
     review: Optional[str] = None
     status: Optional[str] = None

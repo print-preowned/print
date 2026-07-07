@@ -1,80 +1,117 @@
-from datetime import datetime, timezone
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest
-from ..utility.database import get_database
-from .model import BookRating, BookRatingCreateRequest, BookRatingUpdateRequest
+from __future__ import annotations
+
 import math
+import uuid
+from dataclasses import dataclass
 
-db = get_database()
-collection = db["book_rating"]
-
-
-async def create_query(rating: BookRatingCreateRequest):
-    data = rating.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    data["status"] = "ACTIVE"
-
-    await collection.insert_one(data)
-
-
-async def update_query(id: str, rating: BookRatingUpdateRequest):
-    data = rating.model_dump(exclude_unset=True)
-    data["updated_at"] = datetime.utcnow()
-
-    return await collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+from app.book_rating.model import BookRatingCreateRequest, BookRatingUpdateRequest
+from app.book_rating.repository import (
+    count_book_ratings,
+    create_book_rating,
+    list_book_ratings,
+    read_book_rating_by_id,
+    read_by_book_id,
+    read_by_user_id,
+    soft_delete_book_rating,
+    update_book_rating,
+)
+from app.book_rating.schemas import BookRatingCreate, BookRatingRead, BookRatingUpdate
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
 
 
-async def delete_query(id: str):
-    return await collection.update_one(
-        {"_id": ObjectId(id)}, {"$set": {"status": "DELETED"}}
-    )
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
-async def read_query(params: ParamRequest) -> PaginatedData[BookRating]:
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
+
+
+def _to_read(row) -> BookRatingRead:
+    return BookRatingRead.model_validate(row)
+
+
+def _to_create(payload: BookRatingCreateRequest) -> BookRatingCreate:
+    data = payload.model_dump(include=set(BookRatingCreate.model_fields.keys()))
+    data["book_id"] = _parse_id(str(data["book_id"]))
+    data["user_id"] = _parse_id(str(data["user_id"]))
+    return BookRatingCreate.model_validate(data)
+
+
+async def create_query(rating: BookRatingCreateRequest) -> None:
+    async with get_sessionmaker()() as session:
+        await create_book_rating(session, _to_create(rating))
+        await session.commit()
+
+
+async def update_query(id: str, rating: BookRatingUpdateRequest) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    update_data = rating.model_dump(exclude_unset=True)
+    if "book_id" in update_data and update_data["book_id"] is not None:
+        update_data["book_id"] = _parse_id(str(update_data["book_id"]))
+    if "user_id" in update_data and update_data["user_id"] is not None:
+        update_data["user_id"] = _parse_id(str(update_data["user_id"]))
+
+    async with get_sessionmaker()() as session:
+        updated = await update_book_rating(
+            session,
+            parsed_id,
+            BookRatingUpdate.model_validate(update_data),
+        )
+        if updated is None:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_book_rating(session, parsed_id)
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def read_query(params: ParamRequest) -> PaginatedData[BookRatingRead]:
     page = max(1, params.page)
     size = params.size
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents({"status": {"$ne": "DELETED"}})
+    async with get_sessionmaker()() as session:
+        total_results = await count_book_ratings(session)
+        rows = await list_book_ratings(session, offset=offset, limit=size)
+        data = [_to_read(row) for row in rows]
+
     total_pages = math.ceil(total_results / size) if size else 1
-    cursor = (
-        collection.find({"status": {"$ne": "DELETED"}})
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
-
     return PaginatedData(
-        data=[BookRating.model_validate(record) for record in records],
+        data=data,
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> BookRating | None:
-    record = await collection.find_one(
-        {"_id": ObjectId(id), "status": {"$ne": "DELETED"}}
-    )
-    if not record:
-        return None
-    return BookRating.model_validate(record)
+async def read_by_id_query(id: str) -> BookRatingRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_book_rating_by_id(session, parsed_id)
+    return _to_read(row) if row else None
 
 
-async def read_by_book_id_query(book_id: str) -> list[BookRating]:
-    cursor = collection.find(
-        {"book_id": ObjectId(book_id), "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [BookRating.model_validate(record) for record in records]
+async def read_by_book_id_query(book_id: str) -> list[BookRatingRead]:
+    async with get_sessionmaker()() as session:
+        rows = await read_by_book_id(session, _parse_id(book_id))
+    return [_to_read(row) for row in rows]
 
 
-async def read_by_user_id_query(user_id: str) -> list[BookRating]:
-    cursor = collection.find(
-        {"user_id": ObjectId(user_id), "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=None)
-    return [BookRating.model_validate(record) for record in records]
-
-
+async def read_by_user_id_query(user_id: str) -> list[BookRatingRead]:
+    async with get_sessionmaker()() as session:
+        rows = await read_by_user_id(session, _parse_id(user_id))
+    return [_to_read(row) for row in rows]

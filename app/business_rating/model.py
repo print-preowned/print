@@ -36,18 +36,17 @@ class BusinessRating(BaseModel):
 
 
 class BusinessRatingCreateRequest(BaseModel):
-    business_id: PyObjectId
-    user_id: PyObjectId
-    order_item_id: Optional[PyObjectId] = None
+    business_id: str
+    user_id: str
+    order_item_id: str | None = None
     rating: int
     review: Optional[str] = None
-    status: str = "ACTIVE"
 
 
 class BusinessRatingUpdateRequest(BaseModel):
-    business_id: Optional[PyObjectId] = None
-    user_id: Optional[PyObjectId] = None
-    order_item_id: Optional[PyObjectId] = None
+    business_id: str | None = None
+    user_id: str | None = None
+    order_item_id: str | None = None
     rating: Optional[int] = None
     review: Optional[str] = None
     status: Optional[str] = None

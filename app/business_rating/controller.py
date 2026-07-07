@@ -1,8 +1,5 @@
-from app.business_rating.model import (
-    BusinessRating,
-    BusinessRatingCreateRequest,
-    BusinessRatingUpdateRequest,
-)
+from app.business_rating.model import BusinessRatingCreateRequest, BusinessRatingUpdateRequest
+from app.business_rating.schemas import BusinessRatingRead
 from .service import (
     delete_service,
     read_service,
@@ -35,18 +32,18 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[BusinessRating]:
+) -> PaginatedResponse[BusinessRatingRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[BusinessRating]:
+async def read_by_id(id: str) -> BaseResponse[BusinessRatingRead]:
     return await read_by_id_service(id)
 
 
 @router.get("/read/by-business/{business_id}")
-async def read_by_business_id(business_id: str) -> BaseResponse[list[BusinessRating]]:
+async def read_by_business_id(business_id: str) -> BaseResponse[list[BusinessRatingRead]]:
     return await read_by_business_id_service(business_id)
 
 

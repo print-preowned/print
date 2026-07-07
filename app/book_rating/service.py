@@ -1,9 +1,6 @@
 from fastapi import HTTPException, Response
-from app.book_rating.model import (
-    BookRating,
-    BookRatingCreateRequest,
-    BookRatingUpdateRequest,
-)
+from app.book_rating.model import BookRatingCreateRequest, BookRatingUpdateRequest
+from app.book_rating.schemas import BookRatingRead
 from .query import (
     delete_query,
     read_query,
@@ -35,9 +32,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[BookRating]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[BookRatingRead]:
     ratings = await read_query(params)
-    return PaginatedResponse[BookRating](
+    return PaginatedResponse[BookRatingRead](
         status_code=200,
         message="Successful",
         data=ratings.data,
@@ -45,20 +42,20 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[BookRating]:
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[BookRating]:
+async def read_by_id_service(id: str) -> BaseResponse[BookRatingRead]:
     rating = await read_by_id_query(id)
     if rating is None:
         raise HTTPException(status_code=404, detail="Rating not found")
-    return BaseResponse[BookRating](status_code=200, message="Successful", data=rating)
+    return BaseResponse[BookRatingRead](status_code=200, message="Successful", data=rating)
 
 
-async def read_by_book_id_service(book_id: str) -> BaseResponse[list[BookRating]]:
+async def read_by_book_id_service(book_id: str) -> BaseResponse[list[BookRatingRead]]:
     data = await read_by_book_id_query(book_id)
-    return BaseResponse[list[BookRating]](status_code=200, message="Successful", data=data)
+    return BaseResponse[list[BookRatingRead]](status_code=200, message="Successful", data=data)
 
 
-async def read_by_user_id_service(user_id: str) -> BaseResponse[list[BookRating]]:
+async def read_by_user_id_service(user_id: str) -> BaseResponse[list[BookRatingRead]]:
     data = await read_by_user_id_query(user_id)
-    return BaseResponse[list[BookRating]](status_code=200, message="Successful", data=data)
+    return BaseResponse[list[BookRatingRead]](status_code=200, message="Successful", data=data)
 
 

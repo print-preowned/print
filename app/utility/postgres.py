@@ -43,6 +43,8 @@ def _load_orm_models() -> None:
     from app.book_genre import orm as book_genre_orm  # noqa: F401
     from app.order import orm as order_orm  # noqa: F401
     from app.order_item import orm as order_item_orm  # noqa: F401
+    from app.book_rating import orm as book_rating_orm  # noqa: F401
+    from app.business_rating import orm as business_rating_orm  # noqa: F401
 
     _orm_models_loaded = True
 

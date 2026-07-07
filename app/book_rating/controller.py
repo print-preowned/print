@@ -1,8 +1,5 @@
-from app.book_rating.model import (
-    BookRating,
-    BookRatingCreateRequest,
-    BookRatingUpdateRequest,
-)
+from app.book_rating.model import BookRatingCreateRequest, BookRatingUpdateRequest
+from app.book_rating.schemas import BookRatingRead
 from .service import (
     delete_service,
     read_service,
@@ -36,23 +33,23 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[BookRating]:
+) -> PaginatedResponse[BookRatingRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[BookRating]:
+async def read_by_id(id: str) -> BaseResponse[BookRatingRead]:
     return await read_by_id_service(id)
 
 
 @router.get("/read/by-book/{book_id}")
-async def read_by_book_id(book_id: str) -> BaseResponse[list[BookRating]]:
+async def read_by_book_id(book_id: str) -> BaseResponse[list[BookRatingRead]]:
     return await read_by_book_id_service(book_id)
 
 
 @router.get("/read/by-user/{user_id}")
-async def read_by_user_id(user_id: str) -> BaseResponse[list[BookRating]]:
+async def read_by_user_id(user_id: str) -> BaseResponse[list[BookRatingRead]]:
     return await read_by_user_id_service(user_id)
 
 
