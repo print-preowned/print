@@ -9,6 +9,7 @@ from app.business_book.model import (
     SELLER_MUTABLE_LISTING_STATUSES,
     SELLER_LISTING_STATUS_TRANSITIONS,
 )
+from app.business_book.schemas import BusinessBookRead
 from .query import (
     delete_query,
     read_query,
@@ -18,13 +19,11 @@ from .query import (
     create_query,
     update_query,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
+from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 
 async def create_service(item: BusinessBookCreateRequest, business_id: str) -> Response:
-    item.business_id = PyObjectId(business_id)
-    item.status = "DRAFT"
-    await create_query(item)
+    await create_query(item, business_id)
     return Response(status_code=201)
 
 
@@ -78,9 +77,9 @@ async def delete_service(id: str, business_id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[BusinessBook]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[BusinessBookRead]:
     items = await read_query(params)
-    return PaginatedResponse[BusinessBook](
+    return PaginatedResponse[BusinessBookRead](
         status_code=200,
         message="Successful",
         data=items.data,

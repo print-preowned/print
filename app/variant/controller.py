@@ -1,7 +1,4 @@
-from app.variant.model import (
-    Variant,
-    PublicCatalogVariant,
-)
+from app.variant.schemas import PublicCatalogVariantRead, VariantRead, VariantWithConfigRead
 from .service import (
     read_service,
     read_by_id_service,
@@ -23,7 +20,7 @@ async def read(
     search: str | None = None,
     token: TokenPayload = Depends(require_context("PLATFORM")),
     _: TokenPayload = Depends(require_privilege(Privilege.READ_VARIANT)),
-) -> PaginatedResponse[Variant]:
+) -> PaginatedResponse[VariantRead]:
     """Platform read-only audit view across all variants. Sellers use business-book scoped routes."""
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
@@ -34,7 +31,7 @@ async def read_by_id(
     id: str,
     token: TokenPayload = Depends(require_context("PLATFORM")),
     _: TokenPayload = Depends(require_privilege(Privilege.READ_VARIANT)),
-) -> BaseResponse[Variant]:
+) -> BaseResponse[VariantRead]:
     """Platform read-only variant detail. Moderation actions belong on business_book listings."""
     return await read_by_id_service(id)
 
@@ -45,7 +42,7 @@ async def read_public_catalog(
     size: int = 5,
     search: str | None = None,
     token: TokenPayload = Depends(require_context("CUSTOMER")),
-) -> PaginatedResponse[PublicCatalogVariant]:
+) -> PaginatedResponse[PublicCatalogVariantRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_public_catalog_service(param)
 
@@ -54,5 +51,5 @@ async def read_public_catalog(
 async def read_public_catalog_by_id(
     id: str,
     token: TokenPayload = Depends(require_context("CUSTOMER")),
-) -> BaseResponse[PublicCatalogVariant]:
+) -> BaseResponse[PublicCatalogVariantRead]:
     return await read_public_catalog_by_id_service(id)

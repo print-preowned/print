@@ -18,9 +18,9 @@ SELLER_LISTING_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
 
 
 class BusinessBook(BaseAppModel):
-    id: PyObjectId = Field(alias="_id", serialization_alias="id")
-    book_id: PyObjectId
-    business_id: PyObjectId
+    id: str = Field(alias="_id", serialization_alias="id")
+    book_id: str
+    business_id: str
     synopsis: Optional[str] = None
     image: Optional[str] = None
     status: str
@@ -29,16 +29,16 @@ class BusinessBook(BaseAppModel):
 
 
 class BusinessBookCreateRequest(BaseModel):
-    book_id: PyObjectId
-    business_id: Optional[PyObjectId] = None  # Injected by server from token
+    book_id: str
+    business_id: Optional[str] = None  # Injected by server from token
     synopsis: Optional[str] = None
     image: Optional[str] = None
     status: str = Field(default="DRAFT", exclude=True)
 
 
 class BusinessBookUpdateRequest(BaseModel):
-    book_id: Optional[PyObjectId] = None
-    business_id: Optional[PyObjectId] = None
+    book_id: Optional[str] = None
+    business_id: Optional[str] = None
     synopsis: Optional[str] = None
     image: Optional[str] = None
     status: Optional[str] = None

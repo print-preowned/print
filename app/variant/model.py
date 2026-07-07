@@ -6,8 +6,8 @@ from app.utility.model import BaseAppModel, PyObjectId
 
 
 class Variant(BaseAppModel):
-    id: PyObjectId = Field(alias="_id", serialization_alias="id")
-    business_book_id: PyObjectId
+    id: str = Field(alias="_id", serialization_alias="id")
+    business_book_id: str
     description: Optional[str] = None
     stock: int
     price: float
@@ -22,7 +22,7 @@ class Variant(BaseAppModel):
 
 class VariantCreateRequest(BaseAppModel):
     """Create sellable variant with option config (one per variant type)."""
-    variant_option_ids: list[PyObjectId]
+    variant_option_ids: list[str]
     description: Optional[str] = None
     stock: int
     price: float

@@ -1,11 +1,6 @@
 from fastapi import HTTPException, Response
-from app.variant.model import (
-    Variant,
-    VariantCreateRequest,
-    VariantUpdateRequest,
-    VariantWithConfig,
-    PublicCatalogVariant,
-)
+from app.variant.schemas import PublicCatalogVariantRead, VariantRead, VariantWithConfigRead
+from app.variant.model import VariantCreateRequest, VariantUpdateRequest
 from .query import (
     create_query,
     delete_query,
@@ -82,9 +77,9 @@ async def delete_service(
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[Variant]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[VariantRead]:
     items = await read_query(params)
-    return PaginatedResponse[Variant](
+    return PaginatedResponse[VariantRead](
         status_code=200,
         message="Successful",
         data=items.data,
@@ -94,10 +89,10 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[Variant]:
 
 async def read_scoped_service(
     business_book_id: str, params: ParamRequest, business_id: str
-) -> PaginatedResponse[VariantWithConfig]:
+) -> PaginatedResponse[VariantWithConfigRead]:
     await _assert_business_book_owned(business_book_id, business_id)
     items = await read_by_business_book_id_query(business_book_id, params)
-    return PaginatedResponse[VariantWithConfig](
+    return PaginatedResponse[VariantWithConfigRead](
         status_code=200,
         message="Successful",
         data=items.data,
@@ -105,29 +100,29 @@ async def read_scoped_service(
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[Variant]:
+async def read_by_id_service(id: str) -> BaseResponse[VariantRead]:
     item = await read_by_id_query(id)
     if item is None:
         raise HTTPException(status_code=404, detail="Variant not found")
-    return BaseResponse[Variant](status_code=200, message="Successful", data=item)
+    return BaseResponse[VariantRead](status_code=200, message="Successful", data=item)
 
 
 async def read_by_id_with_config_service(
     id: str,
-) -> BaseResponse[VariantWithConfig]:
+) -> BaseResponse[VariantWithConfigRead]:
     item = await read_by_id_with_config_query(id)
     if item is None:
         raise HTTPException(status_code=404, detail="Variant not found")
-    return BaseResponse[VariantWithConfig](
+    return BaseResponse[VariantWithConfigRead](
         status_code=200, message="Successful", data=item
     )
 
 
 async def read_public_catalog_service(
     params: ParamRequest,
-) -> PaginatedResponse[PublicCatalogVariant]:
+) -> PaginatedResponse[PublicCatalogVariantRead]:
     items = await read_public_catalog_query(params)
-    return PaginatedResponse[PublicCatalogVariant](
+    return PaginatedResponse[PublicCatalogVariantRead](
         status_code=200,
         message="Successful",
         data=items.data,
@@ -137,10 +132,10 @@ async def read_public_catalog_service(
 
 async def read_public_catalog_by_id_service(
     id: str,
-) -> BaseResponse[PublicCatalogVariant]:
+) -> BaseResponse[PublicCatalogVariantRead]:
     item = await read_public_catalog_by_id_query(id)
     if item is None:
         raise HTTPException(status_code=404, detail="Variant not found")
-    return BaseResponse[PublicCatalogVariant](
+    return BaseResponse[PublicCatalogVariantRead](
         status_code=200, message="Successful", data=item
     )

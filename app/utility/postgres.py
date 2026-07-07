@@ -34,6 +34,10 @@ def _load_orm_models() -> None:
     from app.user import orm as user_orm  # noqa: F401
     from app.variant_option import orm as variant_option_orm  # noqa: F401
     from app.variant_type import orm as variant_type_orm  # noqa: F401
+    from app.book import orm as book_orm  # noqa: F401
+    from app.business_book import orm as business_book_orm  # noqa: F401
+    from app.variant import orm as variant_orm  # noqa: F401
+    from app.variant_config import orm as variant_config_orm  # noqa: F401
 
     _orm_models_loaded = True
 

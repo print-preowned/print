@@ -29,14 +29,14 @@ class VariantConfig(BaseModel):
 
 
 class VariantConfigCreateRequest(BaseModel):
-    variant_option_id: PyObjectId
-    variant_id: PyObjectId
+    variant_option_id: str
+    variant_id: str
     status: str = "ACTIVE"
 
 
 class VariantConfigUpdateRequest(BaseModel):
-    variant_option_id: Optional[PyObjectId] = None
-    variant_id: Optional[PyObjectId] = None
+    variant_option_id: Optional[str] = None
+    variant_id: Optional[str] = None
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
