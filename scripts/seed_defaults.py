@@ -37,13 +37,21 @@ from app.role_privilege.repository import (
 )
 from app.role_privilege.schemas import RolePrivilegeCreate
 from app.utility.postgres import get_sessionmaker
-from app.platform_privilege.model import PlatformPrivilegeCreateRequest
-from app.platform_privilege.query import create_query as create_platform_privilege_query, read_by_code_query as read_platform_privilege_by_code_query
-from app.platform_privilege_set.model import PlatformPrivilegeSetCreateRequest
-from app.platform_privilege_set.query import create_query as create_platform_privilege_set_query
-from app.platform_privilege_set_privilege.model import PlatformPrivilegeSetPrivilegeCreateRequest
-from app.platform_privilege_set_privilege.query import create_query as create_platform_privilege_set_privilege_query, read_by_privilege_set_and_privilege_query
-from app.utility.model import PyObjectId
+from app.platform_privilege.repository import (
+    create_platform_privilege,
+    read_platform_privilege_by_code,
+)
+from app.platform_privilege.schemas import PlatformPrivilegeCreate
+from app.platform_privilege_set.repository import (
+    create_platform_privilege_set,
+    read_platform_privilege_set_by_name,
+)
+from app.platform_privilege_set.schemas import PlatformPrivilegeSetCreate
+from app.platform_privilege_set_privilege.repository import (
+    create_platform_privilege_set_privilege,
+    read_by_privilege_set_and_code,
+)
+from app.platform_privilege_set_privilege.schemas import PlatformPrivilegeSetPrivilegeCreate
 
 VARIANT_TYPES = {
     "Condition": ["New", "Like New", "Very Good", "Good", "Acceptable"],
@@ -134,21 +142,21 @@ async def seed_business_auth():
         await session.commit()
 
 
-async def create_platform_privileges():
+async def create_platform_privileges(session: AsyncSession) -> int:
     print("\nCreating platform privileges...")
     created_count = 0
 
     for priv_info in PLATFORM_PRIVILEGES:
-        existing = await read_platform_privilege_by_code_query(priv_info.code)
+        existing = await read_platform_privilege_by_code(session, priv_info.code)
         if existing:
             print(f"  - {priv_info.code} already exists")
         else:
-            await create_platform_privilege_query(
-                PlatformPrivilegeCreateRequest(
+            await create_platform_privilege(
+                session,
+                PlatformPrivilegeCreate(
                     code=priv_info.code,
                     description=priv_info.description,
-                    status="ACTIVE",
-                )
+                ),
             )
             created_count += 1
             print(f"  ✓ Created {priv_info.code}")
@@ -157,58 +165,52 @@ async def create_platform_privileges():
     return created_count
 
 
-async def create_platform_privilege_sets():
+async def create_platform_privilege_sets(session: AsyncSession) -> tuple[int, int]:
     print("\nCreating platform privilege sets...")
-    from app.utility.database import get_database
-
     created_sets = 0
     created_mappings = 0
-    db = get_database()
-    collection = db["platform_privilege_set"]
 
     for set_info in PLATFORM_PRIVILEGE_SETS:
-        existing_record = await collection.find_one(
-            {"name": set_info.name, "status": {"$ne": "DELETED"}}
-        )
+        existing_record = await read_platform_privilege_set_by_name(session, set_info.name)
 
         if existing_record:
-            privilege_set_id = PyObjectId(existing_record["_id"])
+            privilege_set_id = existing_record.id
             print(f"  - Privilege set '{set_info.name}' already exists (ID: {privilege_set_id})")
         else:
-            await create_platform_privilege_set_query(
-                PlatformPrivilegeSetCreateRequest(name=set_info.name, status="ACTIVE")
+            created = await create_platform_privilege_set(
+                session,
+                PlatformPrivilegeSetCreate(name=set_info.name),
             )
+            privilege_set_id = created.id
             created_sets += 1
             print(f"  ✓ Created privilege set: {set_info.name}")
 
-            record = await collection.find_one(
-                {"name": set_info.name, "status": {"$ne": "DELETED"}},
-                sort=[("created_at", -1)],
-            )
-            if not record:
-                print(f"    ⚠ Warning: Could not find created privilege set '{set_info.name}'")
-                continue
-            privilege_set_id = PyObjectId(record["_id"])
-
         for privilege_code in set_info.privileges:
-            existing_mapping = await read_by_privilege_set_and_privilege_query(
-                str(privilege_set_id), privilege_code
+            existing_mapping = await read_by_privilege_set_and_code(
+                session, privilege_set_id, privilege_code
             )
             if existing_mapping:
                 print(f"    - {privilege_code} already mapped to {set_info.name}")
             else:
-                await create_platform_privilege_set_privilege_query(
-                    PlatformPrivilegeSetPrivilegeCreateRequest(
+                await create_platform_privilege_set_privilege(
+                    session,
+                    PlatformPrivilegeSetPrivilegeCreate(
                         privilege_set_id=privilege_set_id,
                         privilege_code=privilege_code,
-                        status="ACTIVE",
-                    )
+                    ),
                 )
                 created_mappings += 1
                 print(f"    ✓ Mapped {privilege_code} to {set_info.name}")
 
     print(f"\n  Summary: Created {created_sets} privilege sets, created {created_mappings} mappings")
     return created_sets, created_mappings
+
+
+async def seed_platform_auth():
+    async with get_sessionmaker()() as session:
+        await create_platform_privileges(session)
+        await create_platform_privilege_sets(session)
+        await session.commit()
 
 
 async def seed_variant_vocabulary():
@@ -277,8 +279,7 @@ async def main():
 
     try:
         await seed_business_auth()
-        await create_platform_privileges()
-        await create_platform_privilege_sets()
+        await seed_platform_auth()
         await seed_variant_vocabulary()
 
         print("\n" + "=" * 60)

@@ -1,8 +1,7 @@
 from datetime import datetime, timezone, timedelta
-from bson import ObjectId
 from fastapi import HTTPException, Response
 from app.platform_invite.model import (
-    PlatformInvite,
+    PlatformInviteSummary,
     PlatformInviteCreateRequest,
     PlatformInviteResendRequest,
     PlatformInviteValidateResponse,
@@ -10,6 +9,7 @@ from app.platform_invite.model import (
     PlatformInviteRejectRequest,
     PlatformInviteWithPrivilegeSet,
 )
+from app.platform_invite.schemas import PlatformInviteRead
 from app.platform_invite.query import (
     create_query,
     read_query,
@@ -28,7 +28,7 @@ from app.platform_user.query import read_by_user_id_query
 from app.platform_user.service import create_service as create_platform_user_service
 from app.platform_user.guards import ensure_super_admin_not_invitable
 from app.platform_privilege_set.query import read_by_ids_query as read_privilege_sets_by_ids
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.utility.email import EmailDeliveryError, send_platform_invite_email
 from pwdlib import PasswordHash
 import secrets
@@ -57,7 +57,7 @@ def _new_invite_token() -> tuple[str, str]:
     return raw_token, hash_token(raw_token)
 
 
-async def _require_pending_invite(invite_id: str) -> PlatformInvite:
+async def _require_pending_invite(invite_id: str) -> PlatformInviteRead:
     await mark_expired_query()
     invite = await read_by_id_query(invite_id)
     if invite is None:
@@ -121,8 +121,8 @@ async def create_invite_service(
     invite_id = await create_query(
         invite,
         token_hash,
-        PyObjectId(invited_by_user_id),
-        expires_at
+        invited_by_user_id,
+        expires_at,
     )
 
     try:
@@ -160,9 +160,9 @@ async def resend_invite_service(
     updated = await resend_pending_query(
         invite_id,
         token_hash=token_hash,
-        platform_privilege_set_id=ObjectId(privilege_set_id),
+        platform_privilege_set_id=privilege_set_id,
         expires_at=expires_at,
-        updated_by=PyObjectId(admin_user_id),
+        updated_by=admin_user_id,
     )
     if not updated:
         raise HTTPException(
@@ -238,8 +238,17 @@ async def validate_invite_service(token: str) -> PlatformInviteValidateResponse:
     
     return PlatformInviteValidateResponse(
         valid=True,
-        invite=invite,
-        message="Invite is valid"
+        invite=PlatformInviteSummary(
+            id=str(invite.id),
+            email=invite.email,
+            platform_privilege_set_id=str(invite.platform_privilege_set_id),
+            expires_at=invite.expires_at,
+            status=invite.status,
+            invited_by=str(invite.invited_by),
+            created_at=invite.created_at,
+            accepted_at=invite.accepted_at,
+        ),
+        message="Invite is valid",
     )
 
 
@@ -366,9 +375,9 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[PlatformInvite
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[PlatformInvite]:
+async def read_by_id_service(id: str) -> BaseResponse[PlatformInviteRead]:
     """Read a platform invite by ID"""
     invite = await read_by_id_query(id)
     if invite is None:
         raise HTTPException(status_code=404, detail="Platform invite not found")
-    return BaseResponse[PlatformInvite](status_code=200, message="Successful", data=invite)
+    return BaseResponse[PlatformInviteRead](status_code=200, message="Successful", data=invite)

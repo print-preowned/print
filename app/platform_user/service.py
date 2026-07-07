@@ -1,11 +1,11 @@
 from fastapi import HTTPException, Request, Response
 from app.platform_user.model import (
-    PlatformUser,
     PlatformUserCreateRequest,
     PlatformUserSignupRequest,
     PlatformUserUpdateRequest,
     PlatformUserWithUser,
 )
+from app.platform_user.schemas import PlatformUserRead
 from app.platform_user.guards import (
     ensure_caller_is_super_admin,
     ensure_super_admin_not_assignable_via_update,
@@ -28,7 +28,7 @@ from .query import (
     update_query,
     read_by_user_id_query,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest, PyObjectId
+from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 
 async def signup_service(user: PlatformUserSignupRequest) -> Response:
@@ -110,11 +110,11 @@ async def transfer_super_admin_service(
 
     await update_query(
         str(caller_platform_user.id),
-        PlatformUserUpdateRequest(platform_privilege_set_id=PyObjectId(admin_set_id)),
+        PlatformUserUpdateRequest(platform_privilege_set_id=admin_set_id),
     )
     await update_query(
         target_platform_user_id,
-        PlatformUserUpdateRequest(platform_privilege_set_id=PyObjectId(super_admin_set_id)),
+        PlatformUserUpdateRequest(platform_privilege_set_id=super_admin_set_id),
     )
     return Response(status_code=200)
 
@@ -133,7 +133,7 @@ async def delete_service(id: str) -> Response:
 
 
 async def _populate_platform_user_with_user(
-    platform_user: PlatformUser,
+    platform_user: PlatformUserRead,
 ) -> PlatformUserWithUser:
     user_docs = await read_users_by_ids([str(platform_user.user_id)])
     privilege_set_docs = await read_privilege_sets_by_ids(
@@ -221,13 +221,13 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[PlatformUserWi
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[PlatformUser]:
+async def read_by_id_service(id: str) -> BaseResponse[PlatformUserRead]:
     platform_user = await read_by_id_query(id)
     if platform_user is None:
         raise HTTPException(status_code=404, detail="Platform user not found")
-    return BaseResponse[PlatformUser](status_code=200, message="Successful", data=platform_user)
+    return BaseResponse[PlatformUserRead](status_code=200, message="Successful", data=platform_user)
 
 
-async def read_by_user_id_service(user_id: str) -> BaseResponse[PlatformUser | None]:
+async def read_by_user_id_service(user_id: str) -> BaseResponse[PlatformUserRead | None]:
     platform_user = await read_by_user_id_query(user_id)
-    return BaseResponse[PlatformUser | None](status_code=200, message="Successful", data=platform_user)
+    return BaseResponse[PlatformUserRead | None](status_code=200, message="Successful", data=platform_user)

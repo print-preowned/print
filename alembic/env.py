@@ -12,6 +12,11 @@ from app.genre import orm as genre_orm  # noqa: F401
 from app.privilege import orm as privilege_orm  # noqa: F401
 from app.role import orm as role_orm  # noqa: F401
 from app.role_privilege import orm as role_privilege_orm  # noqa: F401
+from app.platform_invite import orm as platform_invite_orm  # noqa: F401
+from app.platform_privilege import orm as platform_privilege_orm  # noqa: F401
+from app.platform_privilege_set import orm as platform_privilege_set_orm  # noqa: F401
+from app.platform_privilege_set_privilege import orm as platform_privilege_set_privilege_orm  # noqa: F401
+from app.platform_user import orm as platform_user_orm  # noqa: F401
 from app.user import orm as user_orm  # noqa: F401
 from app.utility.config import get_settings
 from app.utility.orm import Base

@@ -1,10 +1,9 @@
 """Guardrails for the singleton super admin role."""
 
-from bson import ObjectId
 from fastapi import HTTPException
 
 from app.platform_privilege_set.query import read_by_name_query
-from app.platform_user.model import PlatformUser
+from app.platform_user.schemas import PlatformUserRead
 from app.platform_user.query import read_active_by_privilege_set_id_query
 
 SUPER_ADMIN_SET_NAME = "Super Admin"
@@ -26,7 +25,7 @@ async def is_super_admin_privilege_set(privilege_set_id: str) -> bool:
     return super_admin_set_id is not None and str(privilege_set_id) == super_admin_set_id
 
 
-async def read_active_super_admin() -> PlatformUser | None:
+async def read_active_super_admin() -> PlatformUserRead | None:
     super_admin_set_id = await get_super_admin_privilege_set_id()
     if not super_admin_set_id:
         return None
@@ -42,7 +41,7 @@ async def ensure_super_admin_not_invitable(privilege_set_id: str) -> None:
         )
 
 
-async def ensure_super_admin_not_removed(platform_user: PlatformUser) -> None:
+async def ensure_super_admin_not_removed(platform_user: PlatformUserRead) -> None:
     if await is_super_admin_privilege_set(str(platform_user.platform_privilege_set_id)):
         raise HTTPException(
             status_code=409,
@@ -58,7 +57,7 @@ async def ensure_super_admin_not_assignable_via_update(privilege_set_id: str) ->
         )
 
 
-async def ensure_caller_is_super_admin(caller_user_id: str) -> PlatformUser:
+async def ensure_caller_is_super_admin(caller_user_id: str) -> PlatformUserRead:
     active_super_admin = await read_active_super_admin()
     if active_super_admin is None:
         raise HTTPException(status_code=409, detail="No super admin is configured")
@@ -71,8 +70,8 @@ async def ensure_caller_is_super_admin(caller_user_id: str) -> PlatformUser:
 
 
 async def ensure_super_admin_not_demoted(
-    existing: PlatformUser,
-    new_privilege_set_id: ObjectId,
+    existing: PlatformUserRead,
+    new_privilege_set_id: str,
 ) -> None:
     if str(new_privilege_set_id) == str(existing.platform_privilege_set_id):
         return

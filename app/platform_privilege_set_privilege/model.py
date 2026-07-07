@@ -25,7 +25,7 @@ class PlatformPrivilegeSetPrivilege(BaseModel):
 
 
 class PlatformPrivilegeSetPrivilegeCreateRequest(BaseModel):
-    privilege_set_id: PyObjectId
+    privilege_set_id: str
     privilege_code: str
     status: str = "ACTIVE"
 

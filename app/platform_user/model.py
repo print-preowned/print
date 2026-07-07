@@ -24,17 +24,17 @@ class PlatformUser(BaseAppModel):
         return str(value)
 
 class PlatformUserSignupRequest(SignupRequest):
-    platform_privilege_set_id: PyObjectId
+    platform_privilege_set_id: str
 
 
 class PlatformUserCreateRequest(BaseModel):
     user_id: str
-    platform_privilege_set_id: PyObjectId
+    platform_privilege_set_id: str
     status: str = "ACTIVE"
 
 
 class PlatformUserUpdateRequest(BaseModel):
-    platform_privilege_set_id: Optional[PyObjectId] = None
+    platform_privilege_set_id: Optional[str] = None
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")

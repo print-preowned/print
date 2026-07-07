@@ -18,11 +18,11 @@ class PlatformInvite(BaseAppModel):
 
 class PlatformInviteCreateRequest(BaseModel):
     email: EmailStr
-    platform_privilege_set_id: PyObjectId
+    platform_privilege_set_id: str
 
 
 class PlatformInviteResendRequest(BaseModel):
-    platform_privilege_set_id: PyObjectId | None = None
+    platform_privilege_set_id: str | None = None
 
 
 class PlatformInviteActionResponse(BaseModel):
@@ -31,9 +31,20 @@ class PlatformInviteActionResponse(BaseModel):
     message: str
 
 
+class PlatformInviteSummary(BaseModel):
+    id: str
+    email: EmailStr
+    platform_privilege_set_id: str
+    expires_at: datetime
+    status: str
+    invited_by: str
+    created_at: datetime
+    accepted_at: Optional[datetime] = None
+
+
 class PlatformInviteValidateResponse(BaseModel):
     valid: bool
-    invite: Optional[PlatformInvite] = None
+    invite: Optional[PlatformInviteSummary] = None
     message: Optional[str] = None
 
 

@@ -1,136 +1,152 @@
-from datetime import datetime, timezone, timedelta
-from typing import Optional
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest, PyObjectId
-from ..utility.database import get_database
-from .model import PlatformInvite, PlatformInviteCreateRequest
-import math
-import hashlib
-import re
+from __future__ import annotations
 
-db = get_database()
-collection = db["platform_invite"]
+import hashlib
+import math
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+
+from app.platform_invite.model import PlatformInviteCreateRequest
+from app.platform_invite.repository import (
+    create_platform_invite,
+    list_platform_invites,
+    mark_expired_invites,
+    read_pending_invite_by_email,
+    read_platform_invite_by_id,
+    read_platform_invite_by_token_hash,
+    resend_pending_invite,
+    update_invite_status,
+    count_platform_invites,
+)
+from app.platform_invite.schemas import PlatformInviteCreate, PlatformInviteRead
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
+
+
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
 def hash_token(token: str) -> str:
-    """Hash a token using SHA-256 (MDC-PU-S-4: raw_invite_tokens_are_never_stored)"""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def read_pending_by_email_query(email: str) -> PlatformInvite | None:
-    """Find a pending invite for an email (case-insensitive)."""
-    record = await collection.find_one(
-        {
-            "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
-            "status": "PENDING",
-        }
-    )
-    if not record:
-        return None
-    return PlatformInvite.model_validate(record)
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
+
+
+def _to_read(row) -> PlatformInviteRead:
+    return PlatformInviteRead.model_validate(row)
+
+
+async def read_pending_by_email_query(email: str) -> PlatformInviteRead | None:
+    async with get_sessionmaker()() as session:
+        row = await read_pending_invite_by_email(session, email)
+    return _to_read(row) if row else None
 
 
 async def resend_pending_query(
     id: str,
     *,
     token_hash: str,
-    platform_privilege_set_id: ObjectId,
+    platform_privilege_set_id: uuid.UUID | str,
     expires_at: datetime,
-    updated_by: PyObjectId,
+    updated_by: str,
 ) -> bool:
-    """Update a pending invite with a new token, privilege set, and expiry."""
-    result = await collection.update_one(
-        {"_id": ObjectId(id), "status": "PENDING"},
-        {
-            "$set": {
-                "token_hash": token_hash,
-                "platform_privilege_set_id": platform_privilege_set_id,
-                "expires_at": expires_at,
-                "updated_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
-                "updated_by": updated_by,
-            }
-        },
+    parsed_id = _parse_id(id)
+    parsed_set_id = uuid.UUID(str(platform_privilege_set_id))
+    async with get_sessionmaker()() as session:
+        updated = await resend_pending_invite(
+            session,
+            parsed_id,
+            token_hash=token_hash,
+            platform_privilege_set_id=parsed_set_id,
+            expires_at=expires_at,
+        )
+        if updated:
+            await session.commit()
+    return updated
+
+
+async def create_query(
+    invite: PlatformInviteCreateRequest,
+    token_hash: str,
+    invited_by: str,
+    expires_at: datetime,
+) -> uuid.UUID:
+    payload = PlatformInviteCreate(
+        email=invite.email,
+        platform_privilege_set_id=uuid.UUID(str(invite.platform_privilege_set_id)),
     )
-    return result.matched_count > 0
+    async with get_sessionmaker()() as session:
+        created = await create_platform_invite(
+            session,
+            payload=payload,
+            token_hash=token_hash,
+            invited_by=uuid.UUID(str(invited_by)),
+            expires_at=expires_at,
+        )
+        await session.commit()
+        return created.id
 
 
-async def create_query(invite: PlatformInviteCreateRequest, token_hash: str, invited_by: PyObjectId, expires_at: datetime) -> ObjectId:
-    """Create a platform invite with hashed token"""
-    data = {
-        "email": invite.email,
-        "platform_privilege_set_id": ObjectId(invite.platform_privilege_set_id),
-        "token_hash": token_hash,
-        "expires_at": expires_at,
-        "status": "PENDING",
-        "invited_by": ObjectId(invited_by),
-        "created_at": datetime.now(timezone.utc),
-        "accepted_at": None,
-    }
-    result = await collection.insert_one(data)
-    return result.inserted_id
-
-
-async def read_query(params: ParamRequest) -> PaginatedData[PlatformInvite]:
-    """Read platform invites with pagination"""
+async def read_query(params: ParamRequest) -> PaginatedData[PlatformInviteRead]:
     page = max(1, params.page)
     size = params.size
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents({"status": {"$ne": "EXPIRED"}})
+    async with get_sessionmaker()() as session:
+        total_results = await count_platform_invites(session)
+        rows = await list_platform_invites(session, offset=offset, limit=size)
+
     total_pages = math.ceil(total_results / size) if size else 1
-    cursor = (
-        collection.find({"status": {"$ne": "EXPIRED"}})
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
-
     return PaginatedData(
-        data=[PlatformInvite.model_validate(record) for record in records],
+        data=[_to_read(row) for row in rows],
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> PlatformInvite | None:
-    """Read a platform invite by ID"""
-    record = await collection.find_one({"_id": ObjectId(id)})
-    if not record:
-        return None
-    return PlatformInvite.model_validate(record)
+async def read_by_id_query(id: str) -> PlatformInviteRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_platform_invite_by_id(session, parsed_id)
+    return _to_read(row) if row else None
 
 
-async def read_by_token_hash_query(token_hash: str) -> PlatformInvite | None:
-    """Find a platform invite by token hash (MDC-PU-S-3: invite_validation)"""
-    record = await collection.find_one({"token_hash": token_hash})
-    if not record:
-        return None
-    return PlatformInvite.model_validate(record)
+async def read_by_token_hash_query(token_hash: str) -> PlatformInviteRead | None:
+    async with get_sessionmaker()() as session:
+        row = await read_platform_invite_by_token_hash(session, token_hash)
+    return _to_read(row) if row else None
 
 
-async def update_status_query(id: str, status: str, accepted_at: Optional[datetime] = None):
-    """Update invite status (accepted, rejected, expired)"""
-    update_data = {
-        "status": status,
-        "updated_at": datetime.now(timezone.utc),
-    }
-    if accepted_at:
-        update_data["accepted_at"] = accepted_at
-    
-    return await collection.update_one(
-        {"_id": ObjectId(id)},
-        {"$set": update_data}
-    )
+async def update_status_query(
+    id: str,
+    status: str,
+    accepted_at: datetime | None = None,
+) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        updated = await update_invite_status(
+            session,
+            parsed_id,
+            status,
+            accepted_at=accepted_at,
+        )
+        if not updated:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
 
 
-async def mark_expired_query():
-    """Mark expired invites as expired (MDC-PU-S-3: invite_tokens_are_single_use_and_expiring)"""
-    now = datetime.now(timezone.utc)
-    return await collection.update_many(
-        {
-            "status": "PENDING",
-            "expires_at": {"$lt": now}
-        },
-        {"$set": {"status": "EXPIRED", "updated_at": now}}
-    )
+async def mark_expired_query() -> UpdateResult:
+    async with get_sessionmaker()() as session:
+        count = await mark_expired_invites(session)
+        if count:
+            await session.commit()
+    return UpdateResult(matched_count=count)

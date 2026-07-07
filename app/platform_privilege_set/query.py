@@ -1,88 +1,128 @@
-from datetime import datetime, timezone
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest
-from ..utility.database import get_database
-from .model import PlatformPrivilegeSet, PlatformPrivilegeSetCreateRequest, PlatformPrivilegeSetUpdateRequest
+from __future__ import annotations
+
 import math
+import uuid
+from dataclasses import dataclass
 
-db = get_database()
-collection = db["platform_privilege_set"]
+from app.platform_privilege_set.model import (
+    PlatformPrivilegeSetCreateRequest,
+    PlatformPrivilegeSetUpdateRequest,
+)
+from app.platform_privilege_set.repository import (
+    create_platform_privilege_set,
+    list_platform_privilege_sets,
+    read_platform_privilege_set_by_id,
+    read_platform_privilege_set_by_name,
+    read_platform_privilege_sets_by_ids,
+    soft_delete_platform_privilege_set,
+    update_platform_privilege_set,
+    count_platform_privilege_sets,
+)
+from app.platform_privilege_set.schemas import (
+    PlatformPrivilegeSetCreate,
+    PlatformPrivilegeSetRead,
+    PlatformPrivilegeSetUpdate,
+)
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
 
 
-async def create_query(platform_privilege_set: PlatformPrivilegeSetCreateRequest):
-    data = platform_privilege_set.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    data["status"] = "ACTIVE"
-
-    await collection.insert_one(data)
+@dataclass
+class UpdateResult:
+    matched_count: int
 
 
-async def update_query(id: str, platform_privilege_set: PlatformPrivilegeSetUpdateRequest):
-    data = platform_privilege_set.model_dump(exclude_unset=True)
-    data["updated_at"] = datetime.now(timezone.utc)
-
-    return await collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def delete_query(id: str):
-    return await collection.update_one(
-        {"_id": ObjectId(id)}, {"$set": {"status": "DELETED"}}
-    )
+def _to_read(row) -> PlatformPrivilegeSetRead:
+    return PlatformPrivilegeSetRead.model_validate(row)
+
+
+async def create_query(platform_privilege_set: PlatformPrivilegeSetCreateRequest) -> None:
+    payload = PlatformPrivilegeSetCreate.model_validate(platform_privilege_set.model_dump())
+    async with get_sessionmaker()() as session:
+        await create_platform_privilege_set(session, payload)
+        await session.commit()
+
+
+async def update_query(
+    id: str,
+    platform_privilege_set: PlatformPrivilegeSetUpdateRequest,
+) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        updated = await update_platform_privilege_set(
+            session,
+            parsed_id,
+            PlatformPrivilegeSetUpdate.model_validate(
+                platform_privilege_set.model_dump(exclude_unset=True)
+            ),
+        )
+        if updated is None:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_platform_privilege_set(session, parsed_id)
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
 
 
 async def read_query(
     params: ParamRequest,
     *,
     exclude_names: list[str] | None = None,
-) -> PaginatedData[PlatformPrivilegeSet]:
+) -> PaginatedData[PlatformPrivilegeSetRead]:
     page = max(1, params.page)
     size = params.size
-    query_filter: dict = {"status": {"$ne": "DELETED"}}
-    if exclude_names:
-        query_filter["name"] = {"$nin": exclude_names}
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents(query_filter)
+    async with get_sessionmaker()() as session:
+        total_results = await count_platform_privilege_sets(session, exclude_names=exclude_names)
+        rows = await list_platform_privilege_sets(
+            session,
+            offset=offset,
+            limit=size,
+            exclude_names=exclude_names,
+        )
+
     total_pages = math.ceil(total_results / size) if size else 1
-    cursor = (
-        collection.find(query_filter)
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
-
     return PaginatedData(
-        data=[PlatformPrivilegeSet.model_validate(record) for record in records],
+        data=[_to_read(row) for row in rows],
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> PlatformPrivilegeSet | None:
-    record = await collection.find_one(
-        {"_id": ObjectId(id), "status": {"$ne": "DELETED"}}
-    )
-    if not record:
-        return None
-    return PlatformPrivilegeSet.model_validate(record)
+async def read_by_id_query(id: str) -> PlatformPrivilegeSetRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_platform_privilege_set_by_id(session, parsed_id)
+    return _to_read(row) if row else None
 
 
-async def read_by_ids_query(ids: list[str]) -> list[PlatformPrivilegeSet]:
-    """Return privilege sets for given ids (for batch population)."""
+async def read_by_ids_query(ids: list[str]) -> list[PlatformPrivilegeSetRead]:
     if not ids:
         return []
-    oids = [ObjectId(i) for i in ids]
-    cursor = collection.find(
-        {"_id": {"$in": oids}, "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=len(oids))
-    return [PlatformPrivilegeSet.model_validate(record) for record in records]
+    parsed_ids = [_parse_id(value) for value in ids]
+    async with get_sessionmaker()() as session:
+        rows = await read_platform_privilege_sets_by_ids(session, parsed_ids)
+    return [_to_read(row) for row in rows]
 
 
-async def read_by_name_query(name: str) -> PlatformPrivilegeSet | None:
-    record = await collection.find_one({"name": name, "status": {"$ne": "DELETED"}})
-    if not record:
-        return None
-    return PlatformPrivilegeSet.model_validate(record)
+async def read_by_name_query(name: str) -> PlatformPrivilegeSetRead | None:
+    async with get_sessionmaker()() as session:
+        row = await read_platform_privilege_set_by_name(session, name)
+    return _to_read(row) if row else None
