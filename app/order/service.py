@@ -1,5 +1,6 @@
 from fastapi import HTTPException, Response
-from app.order.model import Order, OrderCreateRequest, OrderUpdateRequest
+from app.order.model import OrderCreateRequest, OrderUpdateRequest
+from app.order.schemas import OrderRead
 from .query import delete_query, read_query, read_by_id_query, create_query, update_query
 from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
@@ -23,9 +24,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[Order]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[OrderRead]:
     orders = await read_query(params)
-    return PaginatedResponse[Order](
+    return PaginatedResponse[OrderRead](
         status_code=200,
         message="Successful",
         data=orders.data,
@@ -33,10 +34,10 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[Order]:
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[Order]:
+async def read_by_id_service(id: str) -> BaseResponse[OrderRead]:
     order = await read_by_id_query(id)
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    return BaseResponse[Order](status_code=200, message="Successful", data=order)
+    return BaseResponse[OrderRead](status_code=200, message="Successful", data=order)
 
 

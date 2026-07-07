@@ -27,15 +27,14 @@ class Order(BaseModel):
 
 
 class OrderCreateRequest(BaseModel):
-    user_id: PyObjectId
+    user_id: str
     reference: str
     currency: str
     total_amount: float
-    status: str = "ACTIVE"
 
 
 class OrderUpdateRequest(BaseModel):
-    user_id: Optional[PyObjectId] = None
+    user_id: str | None = None
     reference: Optional[str] = None
     currency: Optional[str] = None
     total_amount: Optional[float] = None

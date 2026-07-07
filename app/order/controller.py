@@ -1,4 +1,5 @@
-from app.order.model import Order, OrderCreateRequest, OrderUpdateRequest
+from app.order.model import OrderCreateRequest, OrderUpdateRequest
+from app.order.schemas import OrderRead
 from .service import (
     delete_service,
     read_service,
@@ -30,13 +31,13 @@ async def delete(id) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[Order]:
+) -> PaginatedResponse[OrderRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[Order]:
+async def read_by_id(id: str) -> BaseResponse[OrderRead]:
     return await read_by_id_service(id)
 
 

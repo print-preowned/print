@@ -27,6 +27,8 @@ from app.variant_type import orm as variant_type_orm  # noqa: F401
 from app.author import orm as author_orm  # noqa: F401
 from app.book_author import orm as book_author_orm  # noqa: F401
 from app.book_genre import orm as book_genre_orm  # noqa: F401
+from app.order import orm as order_orm  # noqa: F401
+from app.order_item import orm as order_item_orm  # noqa: F401
 from app.utility.config import get_settings
 from app.utility.orm import Base
 

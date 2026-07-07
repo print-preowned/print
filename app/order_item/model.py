@@ -21,18 +21,17 @@ class OrderItem(BaseAppModel):
 
 
 class OrderItemCreateRequest(BaseModel):
-    order_id: PyObjectId
-    variant_id: PyObjectId
+    order_id: str
+    variant_id: str
     quantity: int
     unit_price: float
     currency: str
-    discount_applied: Optional[float] = None
-    status: str = "ACTIVE"
+    discount_applied: float | None = None
 
 
 class OrderItemUpdateRequest(BaseModel):
-    order_id: Optional[PyObjectId] = None
-    variant_id: Optional[PyObjectId] = None
+    order_id: str | None = None
+    variant_id: str | None = None
     quantity: Optional[int] = None
     unit_price: Optional[float] = None
     currency: Optional[str] = None
