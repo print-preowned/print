@@ -1,9 +1,6 @@
 from fastapi import HTTPException, Response
-from app.book_author.model import (
-    BookAuthor,
-    BookAuthorCreateRequest,
-    BookAuthorUpdateRequest,
-)
+from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateRequest
+from app.book_author.schemas import BookAuthorRead
 from .query import (
     delete_query,
     delete_by_book_and_author_query,
@@ -45,9 +42,9 @@ async def delete_by_book_and_author_service(
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[BookAuthor]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[BookAuthorRead]:
     mappings = await read_query(params)
-    return PaginatedResponse[BookAuthor](
+    return PaginatedResponse[BookAuthorRead](
         status_code=200,
         message="Successful",
         data=mappings.data,
@@ -55,20 +52,20 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[BookAuthor]:
     )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[BookAuthor]:
+async def read_by_id_service(id: str) -> BaseResponse[BookAuthorRead]:
     mapping = await read_by_id_query(id)
     if mapping is None:
         raise HTTPException(status_code=404, detail="Mapping not found")
-    return BaseResponse[BookAuthor](status_code=200, message="Successful", data=mapping)
+    return BaseResponse[BookAuthorRead](status_code=200, message="Successful", data=mapping)
 
 
-async def read_by_book_id_service(book_id: str) -> BaseResponse[list[BookAuthor]]:
+async def read_by_book_id_service(book_id: str) -> BaseResponse[list[BookAuthorRead]]:
     data = await read_by_book_id_query(book_id)
-    return BaseResponse[list[BookAuthor]](status_code=200, message="Successful", data=data)
+    return BaseResponse[list[BookAuthorRead]](status_code=200, message="Successful", data=data)
 
 
-async def read_by_author_id_service(author_id: str) -> BaseResponse[list[BookAuthor]]:
+async def read_by_author_id_service(author_id: str) -> BaseResponse[list[BookAuthorRead]]:
     data = await read_by_author_id_query(author_id)
-    return BaseResponse[list[BookAuthor]](status_code=200, message="Successful", data=data)
+    return BaseResponse[list[BookAuthorRead]](status_code=200, message="Successful", data=data)
 
 

@@ -29,14 +29,13 @@ class BookAuthor(BaseAppModel):
 
 
 class BookAuthorCreateRequest(BaseModel):
-    book_id: PyObjectId
-    author_id: PyObjectId
-    status: str = "ACTIVE"
+    book_id: str
+    author_id: str
 
 
 class BookAuthorUpdateRequest(BaseModel):
-    book_id: Optional[PyObjectId] = None
-    author_id: Optional[PyObjectId] = None
+    book_id: str | None = None
+    author_id: str | None = None
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")

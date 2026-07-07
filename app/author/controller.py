@@ -1,4 +1,5 @@
-from app.author.model import Author, AuthorCreateRequest, AuthorUpdateRequest
+from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
+from app.author.schemas import AuthorRead
 from .service import (
     delete_service,
     read_service,
@@ -55,7 +56,7 @@ async def read(
     size: int = 5,
     search: str | None = None,
     token: TokenPayload = Depends(require_privilege("READ_AUTHOR"))
-) -> PaginatedResponse[Author]:
+) -> PaginatedResponse[AuthorRead]:
     """
     Read authors (paginated)
     
@@ -70,7 +71,7 @@ async def read(
 async def read_by_id(
     id: str,
     token: TokenPayload = Depends(require_privilege("READ_AUTHOR"))
-) -> BaseResponse[Author]:
+) -> BaseResponse[AuthorRead]:
     """
     Read an author by ID
     

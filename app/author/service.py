@@ -1,6 +1,7 @@
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
-from app.author.model import Author, AuthorCreateRequest, AuthorUpdateRequest
+from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
+from app.author.schemas import AuthorRead
 from .query import (
     delete_query,
     read_query,
@@ -37,9 +38,9 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[Author]:
+async def read_service(params: ParamRequest) -> PaginatedResponse[AuthorRead]:
     authors = await read_query(params)
-    response = PaginatedResponse[Author](
+    response = PaginatedResponse[AuthorRead](
         status_code=200,
         message="Successful",
         data=authors.data,
@@ -49,12 +50,12 @@ async def read_service(params: ParamRequest) -> PaginatedResponse[Author]:
     return response
 
 
-async def read_by_id_service(id: str) -> BaseResponse[Author]:
+async def read_by_id_service(id: str) -> BaseResponse[AuthorRead]:
     author = await read_by_id_query(id)
 
     if author is None:
         raise HTTPException(status_code=404, detail="Author not found")
 
-    response = BaseResponse[Author](status_code=200, message="Successful", data=author)
+    response = BaseResponse[AuthorRead](status_code=200, message="Successful", data=author)
 
     return response

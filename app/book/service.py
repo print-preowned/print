@@ -1,11 +1,11 @@
 from collections import defaultdict
+import uuid
 
 from bson import ObjectId
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
-from app.author.model import Author
+from app.author.schemas import AuthorRead
 from app.book.model import (
-    Book,
     BookCreateRequest,
     BookUpdateRequest,
     BookReadResponse,
@@ -13,6 +13,7 @@ from app.book.model import (
     AuthorRef,
     GenreRef,
 )
+from app.book.schemas import BookRead
 from app.genre.schemas import GenreRead
 from app.book_author.model import BookAuthorCreateRequest
 from app.book_genre.model import BookGenreCreateRequest
@@ -63,6 +64,17 @@ def _object_ids(ids: list[str], field_name: str) -> list[ObjectId]:
     return result
 
 
+def _validate_uuids(ids: list[str], field_name: str) -> None:
+    for value in ids:
+        try:
+            uuid.UUID(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {field_name}: {value}",
+            ) from exc
+
+
 async def _sync_book_links(
     book_id: str,
     author_ids: list[str],
@@ -78,8 +90,8 @@ async def _sync_book_links(
     for author_id in target_author_ids - existing_author_ids:
         await create_book_author_query(
             BookAuthorCreateRequest(
-                book_id=PyObjectId(book_id),
-                author_id=PyObjectId(author_id),
+                book_id=book_id,
+                author_id=author_id,
             )
         )
 
@@ -127,7 +139,7 @@ async def create_service(book: BookCreateRequest) -> Response:
             if update.matched_count == 0:
                 raise HTTPException(status_code=500, detail="Failed to save book image")
 
-        _object_ids(book.author_ids, "author_id")
+        _validate_uuids(book.author_ids, "author_id")
         _object_ids(book.genre_ids, "genre_id")
         await _sync_book_links(book_id, book.author_ids, book.genre_ids)
     except HTTPException:
@@ -174,7 +186,7 @@ async def update_service(id: str, book: BookUpdateRequest) -> Response:
             if book.genre_ids is not None
             else [str(link.genre_id) for link in genre_links]
         )
-        _object_ids(next_author_ids, "author_id")
+        _validate_uuids(next_author_ids, "author_id")
         _object_ids(next_genre_ids, "genre_id")
         await _sync_book_links(id, next_author_ids, next_genre_ids)
 
@@ -190,7 +202,7 @@ async def delete_service(id: str) -> Response:
     return Response(status_code=204)
 
 
-def _author_ref(author: Author) -> AuthorRef:
+def _author_ref(author: AuthorRead) -> AuthorRef:
     return AuthorRef(
         id=str(author.id),
         name=f"{author.first_name} {author.last_name}".strip() or "Unknown",
@@ -201,7 +213,7 @@ def _genre_ref(genre: GenreRead) -> GenreRef:
     return GenreRef(id=str(genre.id), name=genre.name or "")
 
 
-def _author_refs(authors: list[Author]) -> list[AuthorRef]:
+def _author_refs(authors: list[AuthorRead]) -> list[AuthorRef]:
     return [_author_ref(author) for author in authors]
 
 
@@ -210,7 +222,7 @@ def _genre_refs(genres: list[GenreRead]) -> list[GenreRef]:
 
 
 def _to_book_read_response(
-    book: Book,
+    book: BookRead,
     author_refs: list[AuthorRef],
     genre_refs: list[GenreRef],
 ) -> BookReadResponse:

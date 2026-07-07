@@ -1,8 +1,5 @@
-from app.book_author.model import (
-    BookAuthor,
-    BookAuthorCreateRequest,
-    BookAuthorUpdateRequest,
-)
+from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateRequest
+from app.book_author.schemas import BookAuthorRead
 from .service import (
     delete_service,
     delete_by_book_and_author_service,
@@ -42,23 +39,23 @@ async def delete_by_book_and_author(book_id: str, author_id: str) -> Response:
 @router.get("/read")
 async def read(
     page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[BookAuthor]:
+) -> PaginatedResponse[BookAuthorRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await read_service(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[BookAuthor]:
+async def read_by_id(id: str) -> BaseResponse[BookAuthorRead]:
     return await read_by_id_service(id)
 
 
 @router.get("/read/by-book/{book_id}")
-async def read_by_book_id(book_id: str) -> BaseResponse[list[BookAuthor]]:
+async def read_by_book_id(book_id: str) -> BaseResponse[list[BookAuthorRead]]:
     return await read_by_book_id_service(book_id)
 
 
 @router.get("/read/by-author/{author_id}")
-async def read_by_author_id(author_id: str) -> BaseResponse[list[BookAuthor]]:
+async def read_by_author_id(author_id: str) -> BaseResponse[list[BookAuthorRead]]:
     return await read_by_author_id_service(author_id)
 
 

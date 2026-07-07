@@ -1,75 +1,108 @@
-from datetime import datetime, timezone
-from bson import ObjectId
-from app.utility.model import PaginatedData, Pagination, ParamRequest
-from ..utility.database import get_database
-from .model import Author, AuthorCreateRequest, AuthorUpdateRequest
+from __future__ import annotations
+
 import math
+import uuid
+from dataclasses import dataclass
 
-db = get_database()
-collection = db["author"]
-
-
-async def create_query(author: AuthorCreateRequest) -> ObjectId:
-    data = author.model_dump()
-    now = datetime.now(timezone.utc)
-    data["updated_at"] = now
-    data["created_at"] = now
-    data["status"] = "ACTIVE"
-
-    result = await collection.insert_one(data)
-    return result.inserted_id
-
-
-async def update_query(id: str, author: AuthorUpdateRequest):
-    data = author.model_dump(exclude_unset=True)
-    data["updated_at"] = datetime.utcnow()
-
-    return await collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
+from app.author.repository import (
+    count_authors,
+    create_author,
+    list_authors,
+    read_author_by_id,
+    read_authors_by_ids,
+    soft_delete_author,
+    update_author,
+)
+from app.author.schemas import AuthorCreate, AuthorRead, AuthorUpdate
+from app.utility.model import PaginatedData, Pagination, ParamRequest
+from app.utility.postgres import get_sessionmaker
 
 
-async def delete_query(id: str):
-    return await collection.update_one(
-        {"_id": ObjectId(id)}, {"$set": {"status": "DELETED"}}
+@dataclass
+class UpdateResult:
+    matched_count: int
+
+
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
+
+
+def _to_read(row) -> AuthorRead:
+    return AuthorRead.model_validate(row)
+
+
+def _to_create(payload: AuthorCreateRequest) -> AuthorCreate:
+    return AuthorCreate.model_validate(
+        payload.model_dump(include=set(AuthorCreate.model_fields.keys()))
     )
 
 
-async def read_query(params: ParamRequest) -> PaginatedData[Author]:
+async def create_query(author: AuthorCreateRequest) -> str:
+    async with get_sessionmaker()() as session:
+        created = await create_author(session, _to_create(author))
+        await session.commit()
+        return str(created.id)
+
+
+async def update_query(id: str, author: AuthorUpdateRequest) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        updated = await update_author(
+            session,
+            parsed_id,
+            AuthorUpdate.model_validate(author.model_dump(exclude_unset=True)),
+        )
+        if updated is None:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def delete_query(id: str) -> UpdateResult:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        deleted = await soft_delete_author(session, parsed_id)
+        if not deleted:
+            return UpdateResult(matched_count=0)
+        await session.commit()
+    return UpdateResult(matched_count=1)
+
+
+async def read_query(params: ParamRequest) -> PaginatedData[AuthorRead]:
     page = max(1, params.page)
     size = params.size
+    offset = (page - 1) * size
 
-    total_results = await collection.count_documents({"status": {"$ne": "DELETED"}})
-    total_pages = math.ceil(total_results / size)
-    cursor = (
-        collection.find({"status": {"$ne": "DELETED"}})
-        .skip((page - 1) * size)
-        .limit(size)
-    )
-    records = await cursor.to_list(length=size)
+    async with get_sessionmaker()() as session:
+        total_results = await count_authors(session)
+        rows = await list_authors(session, offset=offset, limit=size)
 
+    total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
-        data=[Author.model_validate(record) for record in records],
+        data=[_to_read(row) for row in rows],
         pagination=Pagination(
-            page=page, size=size, total_pages=total_pages, total_results=total_results
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            total_results=total_results,
         ),
     )
 
 
-async def read_by_id_query(id: str) -> Author | None:
-    record = await collection.find_one(
-        {"_id": ObjectId(id), "status": {"$ne": "DELETED"}}
-    )
-    if not record:
+async def read_by_id_query(id: str) -> AuthorRead | None:
+    parsed_id = _parse_id(id)
+    async with get_sessionmaker()() as session:
+        row = await read_author_by_id(session, parsed_id)
+    if row is None:
         return None
-    return Author.model_validate(record)
+    return _to_read(row)
 
 
-async def read_by_ids_query(ids: list[str]) -> list[Author]:
-    """Return list of author docs for given ids (for batch population)."""
+async def read_by_ids_query(ids: list[str]) -> list[AuthorRead]:
     if not ids:
         return []
-    oids = [ObjectId(i) for i in ids]
-    cursor = collection.find(
-        {"_id": {"$in": oids}, "status": {"$ne": "DELETED"}}
-    )
-    records = await cursor.to_list(length=len(oids))
-    return [Author.model_validate(record) for record in records]
+    parsed_ids = [_parse_id(value) for value in ids]
+    async with get_sessionmaker()() as session:
+        rows = await read_authors_by_ids(session, parsed_ids)
+    return [_to_read(row) for row in rows]
