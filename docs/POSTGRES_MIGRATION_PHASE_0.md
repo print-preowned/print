@@ -2,8 +2,8 @@
 
 ## Decision Baseline
 
-- Migration target: PostgreSQL with async SQLAlchemy ORM and Alembic.
-- Primary keys: UUIDs stored in PostgreSQL native `uuid` columns and exposed through the API as strings.
+- Migration target: PostgreSQL **18+** with async SQLAlchemy ORM and Alembic (dev baseline: 18.4).
+- Primary keys: PostgreSQL `uuid` columns with **`uuidv7()`** `server_default` (PG 18+), exposed through the API as strings. IDs are assigned on insert; repositories must `flush()` before reading `row.id`. Use a Python UUID library only if app-side generation is needed later.
 - Data state assumption: current Mongo data is dev/staging data, so the migration can favor simple re-seeding or repeatable backfills over zero-downtime production cutover machinery.
 - Migration style: phased port with a final cutover, not a single big-bang rewrite.
 - Authorization invariant: middleware remains DB-free; JWT and Redis continue to be the request authority.
@@ -115,7 +115,11 @@ Use SQLAlchemy 2.x typed declarative style, not untyped `Column(...)`:
 ```python
 # Preferred
 class User(Base):
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("uuidv7()"),
+    )
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
 
 # Avoid for new code

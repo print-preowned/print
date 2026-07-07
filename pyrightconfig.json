@@ -31,6 +31,7 @@
     "alembic/versions/20260703_0001_create_genres.py",
     "alembic/versions/20260705_0002_create_auth_foundation.py",
     "alembic/versions/20260705_0003_tighten_users_column_lengths.py",
+    "alembic/versions/20260707_0004_uuidv7_primary_key_default.py",
     "tests/**/*.py"
   ],
   "exclude": [
