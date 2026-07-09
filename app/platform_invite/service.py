@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import secrets
 import uuid
@@ -18,16 +19,16 @@ from app.platform_invite.model import (
     PlatformInviteValidateResponse,
     PlatformInviteWithPrivilegeSet,
 )
-from app.platform_invite.query import hash_token
 from app.platform_invite.repository import PlatformInviteRepository
 from app.platform_invite.schemas import PlatformInviteCreate, PlatformInviteRead
-from app.platform_privilege_set.query import read_by_ids_query as read_privilege_sets_by_ids
+from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
 from app.platform_user.guards import ensure_super_admin_not_invitable
 from app.platform_user.model import PlatformUserCreateRequest
-from app.platform_user.query import read_by_user_id_query
+from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.service import PlatformUserService
 from app.user.model import SignupRequest
-from app.user.query import read_by_email_query, signup_query
+from app.user.repository import UserRepository
+from app.user.schemas import UserSignup
 from app.utility.email import EmailDeliveryError, send_platform_invite_email
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
@@ -36,8 +37,12 @@ INVITE_EXPIRY_DAYS = 7
 
 
 def generate_invite_token() -> str:
-    """Generate a random token for platform invite (MDC-PU-S-4: raw_invite_tokens_are_never_stored)"""
+    """Generate a random token for platform invite."""
     return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -72,6 +77,9 @@ class PlatformInviteService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PlatformInviteRepository(session)
+        self._platform_user_repo = PlatformUserRepository(session)
+        self._privilege_set_repo = PlatformPrivilegeSetRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def _mark_expired(self) -> None:
         await self._repo.mark_expired_invites()
@@ -93,10 +101,10 @@ class PlatformInviteService:
         return invite
 
     async def _ensure_email_not_platform_user(self, email: str) -> None:
-        user = await read_by_email_query(email)
+        user = await self._user_repo.read_user_by_email(email)
         if user is None:
             return
-        platform_user = await read_by_user_id_query(str(user.id))
+        platform_user = await self._platform_user_repo.read_platform_user_by_user_id(user.id)
         if platform_user is not None:
             raise HTTPException(
                 status_code=409,
@@ -246,7 +254,7 @@ class PlatformInviteService:
 
         invite = validation.invite
 
-        existing_user = await read_by_email_query(invite.email)
+        existing_user = await self._user_repo.read_user_by_email(invite.email)
         if existing_user:
             raise HTTPException(
                 status_code=409,
@@ -264,7 +272,10 @@ class PlatformInviteService:
             status="ACTIVE",
         )
 
-        user_id = await signup_query(signup_data)
+        created_user = await self._user_repo.signup_user(
+            UserSignup.model_validate(signup_data.model_dump(include=set(UserSignup.model_fields)))
+        )
+        user_id = str(created_user.id)
 
         platform_user_data = PlatformUserCreateRequest(
             user_id=user_id,
@@ -318,7 +329,9 @@ class PlatformInviteService:
             )
 
         privilege_set_ids = list({str(inv.platform_privilege_set_id) for inv in invites})
-        privilege_set_docs = await read_privilege_sets_by_ids(privilege_set_ids)
+        privilege_set_docs = await self._privilege_set_repo.read_platform_privilege_sets_by_ids(
+            [uuid.UUID(privilege_set_id) for privilege_set_id in privilege_set_ids]
+        )
         privilege_set_map = {str(ps.id): ps.name for ps in privilege_set_docs}
 
         data = []

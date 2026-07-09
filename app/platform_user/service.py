@@ -6,7 +6,7 @@ import uuid
 from fastapi import HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.platform_privilege_set.query import read_by_ids_query as read_privilege_sets_by_ids
+from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
 from app.platform_user.guards import (
     ensure_caller_is_super_admin,
     ensure_super_admin_not_assignable_via_update,
@@ -26,8 +26,8 @@ from app.platform_user.model import (
 from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.schemas import PlatformUserCreate, PlatformUserRead, PlatformUserUpdate
 from app.user.model import LoginRequest, LoginResponse
-from app.user.query import read_by_ids_query as read_users_by_ids
-from app.user.query import signup_query
+from app.user.repository import UserRepository
+from app.user.schemas import UserSignup
 from app.user.service import UserService
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
@@ -59,9 +59,14 @@ class PlatformUserService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PlatformUserRepository(session)
+        self._privilege_set_repo = PlatformPrivilegeSetRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def signup(self, user: PlatformUserSignupRequest) -> Response:
-        user_id = await signup_query(user)
+        created_user = await self._user_repo.signup_user(
+            UserSignup.model_validate(user.model_dump(include=set(UserSignup.model_fields)))
+        )
+        user_id = str(created_user.id)
 
         await self.create(
             PlatformUserCreateRequest(
@@ -169,9 +174,9 @@ class PlatformUserService:
         self,
         platform_user: PlatformUserRead,
     ) -> PlatformUserWithUser:
-        user_docs = await read_users_by_ids([str(platform_user.user_id)])
-        privilege_set_docs = await read_privilege_sets_by_ids(
-            [str(platform_user.platform_privilege_set_id)]
+        user_docs = await self._user_repo.read_users_by_ids([platform_user.user_id])
+        privilege_set_docs = await self._privilege_set_repo.read_platform_privilege_sets_by_ids(
+            [platform_user.platform_privilege_set_id]
         )
         user = user_docs[0] if user_docs else None
         privilege_set = privilege_set_docs[0] if privilege_set_docs else None
@@ -224,8 +229,12 @@ class PlatformUserService:
 
         user_ids = [str(pu.user_id) for pu in platform_users]
         privilege_set_ids = list({str(pu.platform_privilege_set_id) for pu in platform_users})
-        user_docs = await read_users_by_ids(user_ids)
-        privilege_set_docs = await read_privilege_sets_by_ids(privilege_set_ids)
+        user_docs = await self._user_repo.read_users_by_ids(
+            [uuid.UUID(user_id) for user_id in user_ids]
+        )
+        privilege_set_docs = await self._privilege_set_repo.read_platform_privilege_sets_by_ids(
+            [uuid.UUID(privilege_set_id) for privilege_set_id in privilege_set_ids]
+        )
         user_map = {}
         for u in user_docs:
             uid = str(u.id)

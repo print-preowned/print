@@ -1,22 +1,40 @@
 """Guardrails for the singleton super admin role."""
 
+import uuid
+
 from fastapi import HTTPException
 
-from app.platform_privilege_set.query import read_by_name_query
+from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
+from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.schemas import PlatformUserRead
-from app.platform_user.query import read_active_by_privilege_set_id_query
+from app.utility.postgres import get_sessionmaker
 
 SUPER_ADMIN_SET_NAME = "Super Admin"
 ADMIN_SET_NAME = "Admin"
 
 
+async def _read_privilege_set_by_name(name: str):
+    async with get_sessionmaker()() as session:
+        return await PlatformPrivilegeSetRepository(session).read_platform_privilege_set_by_name(
+            name
+        )
+
+
+async def _read_active_by_privilege_set_id(privilege_set_id: str) -> PlatformUserRead | None:
+    async with get_sessionmaker()() as session:
+        row = await PlatformUserRepository(session).read_active_by_privilege_set_id(
+            uuid.UUID(privilege_set_id)
+        )
+    return PlatformUserRead.model_validate(row) if row else None
+
+
 async def get_super_admin_privilege_set_id() -> str | None:
-    privilege_set = await read_by_name_query(SUPER_ADMIN_SET_NAME)
+    privilege_set = await _read_privilege_set_by_name(SUPER_ADMIN_SET_NAME)
     return str(privilege_set.id) if privilege_set else None
 
 
 async def get_admin_privilege_set_id() -> str | None:
-    privilege_set = await read_by_name_query(ADMIN_SET_NAME)
+    privilege_set = await _read_privilege_set_by_name(ADMIN_SET_NAME)
     return str(privilege_set.id) if privilege_set else None
 
 
@@ -29,7 +47,7 @@ async def read_active_super_admin() -> PlatformUserRead | None:
     super_admin_set_id = await get_super_admin_privilege_set_id()
     if not super_admin_set_id:
         return None
-    return await read_active_by_privilege_set_id_query(super_admin_set_id)
+    return await _read_active_by_privilege_set_id(super_admin_set_id)
 
 
 async def ensure_super_admin_not_invitable(privilege_set_id: str) -> None:
@@ -37,7 +55,10 @@ async def ensure_super_admin_not_invitable(privilege_set_id: str) -> None:
     if await is_super_admin_privilege_set(privilege_set_id):
         raise HTTPException(
             status_code=409,
-            detail="Super Admin cannot be assigned via invite. Transfer the role from Account settings.",
+            detail=(
+                "Super Admin cannot be assigned via invite. "
+                "Transfer the role from Account settings."
+            ),
         )
 
 
@@ -53,7 +74,10 @@ async def ensure_super_admin_not_assignable_via_update(privilege_set_id: str) ->
     if await is_super_admin_privilege_set(privilege_set_id):
         raise HTTPException(
             status_code=409,
-            detail="Super Admin can only be transferred from Account settings by the current super admin",
+            detail=(
+                "Super Admin can only be transferred from Account settings "
+                "by the current super admin"
+            ),
         )
 
 

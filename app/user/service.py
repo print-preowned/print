@@ -8,10 +8,10 @@ from pwdlib import PasswordHash
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.business.query import read_by_id_query as read_business_by_id_query
-from app.business_user.query import read_one_by_user_id_query
-from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
-from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
+from app.business.repository import BusinessRepository
+from app.business_user.repository import BusinessUserRepository
+from app.platform_privilege_set_privilege.repository import PlatformPrivilegeSetPrivilegeRepository
+from app.platform_user.repository import PlatformUserRepository
 from app.role.model import OWNER_ROLE_CODE
 from app.role.repository import RoleRepository
 from app.role_privilege.repository import RolePrivilegeRepository
@@ -55,6 +55,10 @@ class UserService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = UserRepository(session)
+        self._business_repo = BusinessRepository(session)
+        self._business_user_repo = BusinessUserRepository(session)
+        self._platform_user_repo = PlatformUserRepository(session)
+        self._platform_privilege_mapping_repo = PlatformPrivilegeSetPrivilegeRepository(session)
         self._role_repo = RoleRepository(session)
         self._role_privilege_repo = RolePrivilegeRepository(session)
 
@@ -76,15 +80,17 @@ class UserService:
         request.app.state.authenticated[str(user.email)] = user.first_name
 
         if is_platform:
-            platform_user = await read_platform_user_by_user_id_query(str(user.id))
+            platform_user = await self._platform_user_repo.read_platform_user_by_user_id(user.id)
             if not platform_user:
                 raise HTTPException(
                     status_code=403,
                     detail="You are not a platform user. Please contact an administrator.",
                 )
 
-            privilege_mappings = await read_by_privilege_set_id_query(
-                str(platform_user.platform_privilege_set_id)
+            privilege_mappings = (
+                await self._platform_privilege_mapping_repo.read_by_privilege_set_id(
+                    platform_user.platform_privilege_set_id
+                )
             )
             privileges = [mapping.privilege_code for mapping in privilege_mappings]
             token = create_platform_token(
@@ -93,7 +99,7 @@ class UserService:
                 password_change_required=(user.status == "NEW"),
             )
         else:
-            membership = await read_one_by_user_id_query(str(user.id))
+            membership = await self._business_user_repo.read_business_user_by_user_id(user.id)
             token = create_customer_token(user, has_business=(membership is not None))
 
         set_key(user.email, token, 60 * 60 * 24)
@@ -230,14 +236,16 @@ class UserService:
         user = _to_read(row)
 
         if target_context == "BUSINESS":
-            membership = await read_one_by_user_id_query(user_id)
+            membership = await self._business_user_repo.read_business_user_by_user_id(
+                parsed_user_id
+            )
             if not membership:
                 raise HTTPException(
                     status_code=404,
                     detail="You don't have a business. Please create one first.",
                 )
 
-            business = await read_business_by_id_query(str(membership.business_id))
+            business = await self._business_repo.read_by_id(membership.business_id)
             if not business:
                 raise HTTPException(status_code=404, detail="Business not found")
 

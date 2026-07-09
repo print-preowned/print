@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -15,11 +16,10 @@ from app.password_reset_token.model import (
     PasswordResetRequest,
     PasswordResetValidateResponse,
 )
-from app.password_reset_token.query import hash_token
 from app.password_reset_token.repository import PasswordResetTokenRepository
 from app.password_reset_token.schemas import PasswordResetTokenCreate
-from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
-from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
+from app.platform_privilege_set_privilege.repository import PlatformPrivilegeSetPrivilegeRepository
+from app.platform_user.repository import PlatformUserRepository
 from app.user.repository import UserRepository
 from app.user.schemas import UserUpdate
 from app.utility.authorization import TokenPayload
@@ -32,6 +32,10 @@ def generate_reset_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def _parse_user_id(user_id: str) -> uuid.UUID:
     return uuid.UUID(user_id)
 
@@ -40,13 +44,17 @@ class PasswordResetTokenService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PasswordResetTokenRepository(session)
+        self._platform_user_repo = PlatformUserRepository(session)
+        self._privilege_mapping_repo = PlatformPrivilegeSetPrivilegeRepository(session)
         self._user_repo = UserRepository(session)
 
     async def request_password_reset(self, request: PasswordResetRequest) -> dict:
         row = await self._user_repo.read_user_by_email(request.email)
         if not row:
             return {
-                "message": "If an account with that email exists, a password reset link has been sent."
+                "message": (
+                    "If an account with that email exists, a password reset link has been sent."
+                )
             }
 
         raw_token = generate_reset_token()
@@ -162,10 +170,12 @@ class PasswordResetTokenService:
 
         new_token: str | None = None
         if token_payload.ctx == "PLATFORM":
-            platform_user = await read_platform_user_by_user_id_query(user_id)
+            platform_user = await self._platform_user_repo.read_platform_user_by_user_id(
+                parsed_user_id
+            )
             if platform_user:
-                privilege_mappings = await read_by_privilege_set_id_query(
-                    str(platform_user.platform_privilege_set_id)
+                privilege_mappings = await self._privilege_mapping_repo.read_by_privilege_set_id(
+                    platform_user.platform_privilege_set_id
                 )
                 privileges = [mapping.privilege_code for mapping in privilege_mappings]
                 updated_row = await self._user_repo.read_user_by_id(parsed_user_id)

@@ -24,9 +24,11 @@ from typing import Any, Dict
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.author.model import AuthorCreateRequest
-from app.author.query import create_query as create_author_query
+from app.author.repository import AuthorRepository
+from app.author.schemas import AuthorCreate
 from app.book.model import BookCreateRequest
-from app.book.query import create_query as create_book_query
+from app.book.repository import BookRepository
+from app.book.schemas import BookCreate
 from app.genre.repository import GenreRepository
 from app.genre.schemas import GenreCreate
 from app.utility.postgres import get_sessionmaker
@@ -50,10 +52,17 @@ async def upload_authors(file_path: Path) -> Dict[str, Any]:
                     status=row.get("status", "ACTIVE").strip(),
                 )
 
-                await create_author_query(author_request)
+                async with get_sessionmaker()() as session:
+                    await AuthorRepository(session).create_author(
+                        AuthorCreate.model_validate(
+                            author_request.model_dump(include=set(AuthorCreate.model_fields.keys()))
+                        )
+                    )
+                    await session.commit()
                 results["success"] += 1
                 print(
-                    f"✓ Row {idx}: Created author {author_request.first_name} {author_request.last_name}"
+                    f"✓ Row {idx}: Created author "
+                    f"{author_request.first_name} {author_request.last_name}"
                 )
 
             except Exception as e:
@@ -111,12 +120,18 @@ async def upload_books(file_path: Path) -> Dict[str, Any]:
                 # Create BookCreateRequest to validate data
                 book_request = BookCreateRequest(
                     title=row["title"].strip(),
-                    genres=genres,
+                    genre_ids=[],
                     image=row["image"].strip(),
                     synopsis=row["synopsis"].strip(),
                 )
 
-                await create_book_query(book_request)
+                async with get_sessionmaker()() as session:
+                    await BookRepository(session).create_book(
+                        BookCreate.model_validate(
+                            book_request.model_dump(include=set(BookCreate.model_fields.keys()))
+                        )
+                    )
+                    await session.commit()
                 results["success"] += 1
                 print(f"✓ Row {idx}: Created book {book_request.title}")
 
@@ -183,13 +198,13 @@ def print_summary(results: Dict[str, Dict[str, Any]]):
         print(f"  ✗ Failed: {failed}")
 
         if result.get("errors"):
-            print(f"  Errors:")
+            print("  Errors:")
             for error in result["errors"][:5]:  # Show first 5 errors
                 print(f"    - {error}")
             if len(result["errors"]) > 5:
                 print(f"    ... and {len(result['errors']) - 5} more errors")
 
-    print(f"\nTOTAL:")
+    print("\nTOTAL:")
     print(f"  ✓ Success: {total_success}")
     print(f"  ✗ Failed: {total_failed}")
     print("=" * 50)

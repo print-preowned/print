@@ -1,47 +1,28 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.privilege_catalog import CrudResourceDef, crud_privilege_defs
 from app.module.model import ModuleCreateRequest, ModuleDeleteRequest, ModuleUpdateRequest
 from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
+from app.privilege.repository import PrivilegeRepository
+from app.privilege.schemas import PrivilegeCreate, PrivilegeUpdate
 from app.role.service import RoleService
 from app.role_privilege.model import RolePrivilegeCreateRequest
+from app.role_privilege.repository import RolePrivilegeRepository
+from app.role_privilege.schemas import RolePrivilegeCreate
 from app.utility.model import BaseResponse
 from app.utility.service_deps import writable_service
-
-from ..privilege.query import (
-    create_query as privilege_create_query,
-)
-from ..privilege.query import (
-    delete_by_code_query as privilege_delete_by_code_query,
-)
-from ..privilege.query import (
-    read_by_code_query as privilege_read_by_code_query,
-)
-from ..privilege.query import (
-    read_by_module_name_query as privilege_read_by_module_name_query,
-)
-from ..privilege.query import (
-    update_query as privilege_update_query,
-)
-from ..role_privilege.query import (
-    create_query as role_privilege_create_query,
-)
-from ..role_privilege.query import (
-    delete_by_role_and_privilege_query,
-    read_by_role_and_privilege_query,
-)
-from ..role_privilege.query import (
-    read_by_privilege_code_query as role_privilege_read_by_privilege_code_query,
-)
 
 
 class ModuleService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-        self._repo = ModuleRepository(session)
+        self._privilege_repo = PrivilegeRepository(session)
+        self._role_privilege_repo = RolePrivilegeRepository(session)
 
     async def create_module(self, request: ModuleCreateRequest) -> Response:
         module_name = request.module_name
@@ -67,18 +48,26 @@ class ModuleService:
         for privilege_def in privilege_defs:
             privilege_code = privilege_def.code
 
-            existing = await privilege_read_by_code_query(privilege_code)
+            existing = await self._privilege_repo.read_privilege_by_code(privilege_code)
             if existing:
                 role_id_str = str(owner_role_id)
-                existing_mapping = await read_by_role_and_privilege_query(
-                    role_id_str, privilege_code
+                existing_mapping = (
+                    await self._role_privilege_repo.read_role_privilege_by_role_and_code(
+                        uuid.UUID(role_id_str),
+                        privilege_code,
+                    )
                 )
                 if not existing_mapping:
                     mapping = RolePrivilegeCreateRequest(
                         role_id=str(owner_role_id),
                         privilege_code=privilege_code,
                     )
-                    await role_privilege_create_query(mapping)
+                    await self._role_privilege_repo.create_role_privilege(
+                        RolePrivilegeCreate(
+                            role_id=uuid.UUID(mapping.role_id),
+                            privilege_code=mapping.privilege_code,
+                        )
+                    )
                 continue
 
             privilege_data = PrivilegeCreateRequest(
@@ -88,13 +77,22 @@ class ModuleService:
                 status="ACTIVE",
             )
 
-            await privilege_create_query(privilege_data)
+            await self._privilege_repo.create_privilege(
+                PrivilegeCreate.model_validate(
+                    privilege_data.model_dump(include=set(PrivilegeCreate.model_fields.keys()))
+                )
+            )
 
             mapping = RolePrivilegeCreateRequest(
                 role_id=str(owner_role_id),
                 privilege_code=privilege_code,
             )
-            await role_privilege_create_query(mapping)
+            await self._role_privilege_repo.create_role_privilege(
+                RolePrivilegeCreate(
+                    role_id=uuid.UUID(mapping.role_id),
+                    privilege_code=mapping.privilege_code,
+                )
+            )
 
         return Response(status_code=201)
 
@@ -113,7 +111,7 @@ class ModuleService:
         owner_role_id = owner_role.id
         owner_role_id_str = str(owner_role_id)
 
-        privileges = await privilege_read_by_module_name_query(module_name)
+        privileges = await self._privilege_repo.read_privileges_by_module_name(module_name)
 
         if not privileges:
             raise HTTPException(
@@ -127,29 +125,38 @@ class ModuleService:
                 status="ACTIVE",
             )
 
-            result = await privilege_update_query(str(privilege.id), update_data)
-            if result.matched_count == 0:
+            updated = await self._privilege_repo.update_privilege(
+                privilege.id,
+                PrivilegeUpdate.model_validate(update_data.model_dump(exclude_unset=True)),
+            )
+            if updated is None:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Failed to update privilege: {privilege.code}",
                 )
 
-            existing_mapping = await read_by_role_and_privilege_query(
-                owner_role_id_str, privilege.code
+            existing_mapping = await self._role_privilege_repo.read_role_privilege_by_role_and_code(
+                uuid.UUID(owner_role_id_str),
+                privilege.code,
             )
             if not existing_mapping:
                 mapping = RolePrivilegeCreateRequest(
                     role_id=str(owner_role_id),
                     privilege_code=privilege.code,
                 )
-                await role_privilege_create_query(mapping)
+                await self._role_privilege_repo.create_role_privilege(
+                    RolePrivilegeCreate(
+                        role_id=uuid.UUID(mapping.role_id),
+                        privilege_code=mapping.privilege_code,
+                    )
+                )
 
         return Response(status_code=200)
 
     async def delete_module(self, request: ModuleDeleteRequest) -> Response:
         module_name = request.module_name
 
-        privileges = await privilege_read_by_module_name_query(module_name)
+        privileges = await self._privilege_repo.read_privileges_by_module_name(module_name)
 
         if not privileges:
             raise HTTPException(
@@ -160,13 +167,15 @@ class ModuleService:
         for privilege in privileges:
             privilege_code = privilege.code
 
-            role_privileges = await role_privilege_read_by_privilege_code_query(privilege_code)
+            role_privileges = await self._role_privilege_repo.read_by_privilege_code(privilege_code)
 
             for role_priv in role_privileges:
-                role_id = str(role_priv.role_id)
-                await delete_by_role_and_privilege_query(role_id, privilege_code)
+                await self._role_privilege_repo.soft_delete_by_role_and_code(
+                    role_priv.role_id,
+                    privilege_code,
+                )
 
-            await privilege_delete_by_code_query(privilege_code)
+            await self._privilege_repo.soft_delete_privilege_by_code(privilege_code)
 
         return Response(status_code=204)
 
