@@ -1,3 +1,5 @@
+from fastapi import APIRouter, Depends, Request, Response
+
 from app.user.model import (
     ContextSwitchRequest,
     ContextSwitchResponse,
@@ -7,74 +9,86 @@ from app.user.model import (
     UserUpdateRequest,
 )
 from app.user.schemas import UserRead
-from .service import (
-    delete_service,
-    read_service,
-    read_by_id_service,
-    signup_service,
-    update_service,
-    read_by_role_id_service,
-    login_service,
-    switch_context_service,
-)
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
-from ..utility.authorization import get_token_payload, TokenPayload
-from fastapi import APIRouter, Request, Response, Depends
+from app.user.service import ReadableUserService, WritableUserService
+from app.utility.authorization import TokenPayload, get_token_payload
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/user", tags=["UserController"])
 
 
 @router.post("/signup")
-async def signup(request: Request, payload: SignupRequest) -> LoginResponse:
-    return await signup_service(request, payload)
+async def signup(
+    request: Request,
+    payload: SignupRequest,
+    service: WritableUserService = Depends(),
+) -> LoginResponse:
+    return await service.signup(request, payload)
 
 
 @router.post("/login")
-async def login(request: Request, payload: LoginRequest):
-    return await login_service(request, payload)
+async def login(
+    request: Request,
+    payload: LoginRequest,
+    service: ReadableUserService = Depends(),
+) -> LoginResponse:
+    return await service.login(request, payload)
 
 
 @router.put("/update/{id}")
-async def update(id: str, payload: UserUpdateRequest) -> Response:
-    return await update_service(id, payload)
+async def update(
+    id: str,
+    payload: UserUpdateRequest,
+    service: WritableUserService = Depends(),
+) -> Response:
+    return await service.update(id, payload)
 
 
 @router.delete("/delete/{id}")
-async def delete(id) -> Response:
-    return await delete_service(id)
+async def delete(
+    id: str,
+    service: WritableUserService = Depends(),
+) -> Response:
+    return await service.delete(id)
 
 
 @router.get("/read")
 async def read(
-    page: int = 1, size: int = 5, search: str | None = None
+    page: int = 1,
+    size: int = 5,
+    search: str | None = None,
+    service: ReadableUserService = Depends(),
 ) -> PaginatedResponse[UserRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    return await read_service(param)
+    return await service.read(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[UserRead]:
-    return await read_by_id_service(id)
+async def read_by_id(
+    id: str,
+    service: ReadableUserService = Depends(),
+) -> BaseResponse[UserRead]:
+    return await service.read_by_id(id)
 
 
 @router.get("/read/by-role/{role_id}")
-async def read_by_role(role_id: str) -> BaseResponse[list[UserRead]]:
-    return await read_by_role_id_service(role_id)
+async def read_by_role(
+    role_id: str,
+    service: ReadableUserService = Depends(),
+) -> BaseResponse[list[UserRead]]:
+    return await service.read_by_role_id(role_id)
 
 
 @router.post("/context/switch")
 async def switch_context(
-    request: Request,
     payload: ContextSwitchRequest,
-    token: TokenPayload = Depends(get_token_payload)
+    token: TokenPayload = Depends(get_token_payload),
+    service: ReadableUserService = Depends(),
 ) -> ContextSwitchResponse:
     """
     Switch context between CUSTOMER and BUSINESS
-    
+
     Following MDC-CONTEXT-3: token_reissue_on_context_switch
     - Validates that current context is not the same as target context
     - Returns a new token for the target context
     """
-    return await switch_context_service(token, payload.target_context)
-
-
+    return await service.switch_context(token, payload.target_context)

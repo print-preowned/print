@@ -1,32 +1,37 @@
-from app.variant_type.schemas import ProductOptionRead
+from fastapi import APIRouter, Depends, Response
+
 from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
-from .service import (
-    delete_service,
-    read_service,
-    read_by_id_service,
-    create_service,
-    update_service,
-)
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
-from ..utility.authorization import require_context, TokenPayload
-from fastapi import APIRouter, Response, Depends
+from app.variant_type.schemas import ProductOptionRead
+from app.variant_type.service import ReadableVariantTypeService, WritableVariantTypeService
+from app.utility.authorization import TokenPayload, require_context
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/variant-type", tags=["VariantTypeController"])
 
 
 @router.post("/create")
-async def create(payload: VariantTypeCreateRequest) -> Response:
-    return await create_service(payload)
+async def create(
+    payload: VariantTypeCreateRequest,
+    service: WritableVariantTypeService = Depends(),
+) -> Response:
+    return await service.create(payload)
 
 
 @router.put("/update/{id}")
-async def update(id: str, payload: VariantTypeUpdateRequest) -> Response:
-    return await update_service(id, payload)
+async def update(
+    id: str,
+    payload: VariantTypeUpdateRequest,
+    service: WritableVariantTypeService = Depends(),
+) -> Response:
+    return await service.update(id, payload)
 
 
 @router.delete("/delete/{id}")
-async def delete(id) -> Response:
-    return await delete_service(id)
+async def delete(
+    id: str,
+    service: WritableVariantTypeService = Depends(),
+) -> Response:
+    return await service.delete(id)
 
 
 @router.get("/read", tags=["client"])
@@ -35,13 +40,15 @@ async def read(
     size: int = 5,
     search: str | None = None,
     token: TokenPayload = Depends(require_context("BUSINESS")),
+    service: ReadableVariantTypeService = Depends(),
 ) -> PaginatedResponse[ProductOptionRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    return await read_service(param)
+    return await service.read(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[ProductOptionRead]:
-    return await read_by_id_service(id)
-
-
+async def read_by_id(
+    id: str,
+    service: ReadableVariantTypeService = Depends(),
+) -> BaseResponse[ProductOptionRead]:
+    return await service.read_by_id(id)

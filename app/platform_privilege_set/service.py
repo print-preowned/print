@@ -1,54 +1,123 @@
+from __future__ import annotations
+
+import math
+import uuid
+
 from fastapi import HTTPException, Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.platform_privilege_set.model import (
     PlatformPrivilegeSet,
     PlatformPrivilegeSetCreateRequest,
     PlatformPrivilegeSetUpdateRequest,
 )
-from app.platform_user.guards import SUPER_ADMIN_SET_NAME
-from .query import (
-    delete_query,
-    read_query,
-    read_by_id_query,
-    create_query,
-    update_query,
+from app.platform_privilege_set.repository import (
+    count_platform_privilege_sets,
+    create_platform_privilege_set,
+    list_platform_privilege_sets,
+    read_platform_privilege_set_by_id,
+    soft_delete_platform_privilege_set,
+    update_platform_privilege_set,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.platform_privilege_set.schemas import (
+    PlatformPrivilegeSetCreate,
+    PlatformPrivilegeSetRead,
+    PlatformPrivilegeSetUpdate,
+)
+from app.platform_user.guards import SUPER_ADMIN_SET_NAME
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.service_deps import readable_service, writable_service
 
 
-async def create_service(platform_privilege_set: PlatformPrivilegeSetCreateRequest) -> Response:
-    await create_query(platform_privilege_set)
-    return Response(status_code=201)
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def update_service(id: str, platform_privilege_set: PlatformPrivilegeSetUpdateRequest) -> Response:
-    update = await update_query(id, platform_privilege_set)
-    if update.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Platform privilege set not found")
-    return Response(status_code=200)
+def _to_read(row) -> PlatformPrivilegeSetRead:
+    return PlatformPrivilegeSetRead.model_validate(row)
 
 
-async def delete_service(id: str) -> Response:
-    deleted = await delete_query(id)
-    if deleted.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Platform privilege set not found")
-    return Response(status_code=204)
+def _to_response(row: PlatformPrivilegeSetRead) -> PlatformPrivilegeSet:
+    return PlatformPrivilegeSet.model_validate(row.model_dump(mode="json"))
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[PlatformPrivilegeSet]:
-    platform_privilege_sets = await read_query(
-        params,
-        exclude_names=[SUPER_ADMIN_SET_NAME],
-    )
-    return PaginatedResponse[PlatformPrivilegeSet](
-        status_code=200,
-        message="Successful",
-        data=platform_privilege_sets.data,
-        pagination=platform_privilege_sets.pagination,
-    )
+class PlatformPrivilegeSetService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, platform_privilege_set: PlatformPrivilegeSetCreateRequest) -> Response:
+        await create_platform_privilege_set(
+            self._session,
+            PlatformPrivilegeSetCreate.model_validate(platform_privilege_set.model_dump()),
+        )
+        return Response(status_code=201)
+
+    async def update(
+        self,
+        id: str,
+        platform_privilege_set: PlatformPrivilegeSetUpdateRequest,
+    ) -> Response:
+        updated = await update_platform_privilege_set(
+            self._session,
+            _parse_id(id),
+            PlatformPrivilegeSetUpdate.model_validate(
+                platform_privilege_set.model_dump(exclude_unset=True)
+            ),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Platform privilege set not found")
+        return Response(status_code=200)
+
+    async def delete(self, id: str) -> Response:
+        deleted = await soft_delete_platform_privilege_set(self._session, _parse_id(id))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Platform privilege set not found")
+        return Response(status_code=204)
+
+    async def read(self, params: ParamRequest) -> PaginatedResponse[PlatformPrivilegeSet]:
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+        exclude_names = [SUPER_ADMIN_SET_NAME]
+
+        total_results = await count_platform_privilege_sets(
+            self._session,
+            exclude_names=exclude_names,
+        )
+        rows = await list_platform_privilege_sets(
+            self._session,
+            offset=offset,
+            limit=size,
+            exclude_names=exclude_names,
+        )
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[PlatformPrivilegeSet](
+            status_code=200,
+            message="Successful",
+            data=[_to_response(_to_read(row)) for row in rows],
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id(self, id: str) -> BaseResponse[PlatformPrivilegeSet]:
+        row = await read_platform_privilege_set_by_id(self._session, _parse_id(id))
+        if row is None:
+            raise HTTPException(status_code=404, detail="Platform privilege set not found")
+        return BaseResponse[PlatformPrivilegeSet](
+            status_code=200,
+            message="Successful",
+            data=_to_response(_to_read(row)),
+        )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[PlatformPrivilegeSet]:
-    platform_privilege_set = await read_by_id_query(id)
-    if platform_privilege_set is None:
-        raise HTTPException(status_code=404, detail="Platform privilege set not found")
-    return BaseResponse[PlatformPrivilegeSet](status_code=200, message="Successful", data=platform_privilege_set)
+class WritablePlatformPrivilegeSetService(writable_service(PlatformPrivilegeSetService)):
+    pass
+
+
+class ReadablePlatformPrivilegeSetService(readable_service(PlatformPrivilegeSetService)):
+    pass

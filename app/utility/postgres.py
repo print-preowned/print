@@ -81,6 +81,17 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+async def get_db() -> AsyncIterator[AsyncSession]:
+    """Request-scoped session for mutating routes; commits on success, rolls back on error."""
+    async with get_sessionmaker()() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 async def dispose_postgres_engine() -> None:
     global _engine, _sessionmaker
     if _engine is not None:

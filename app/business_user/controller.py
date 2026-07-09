@@ -1,49 +1,60 @@
+from fastapi import APIRouter, Depends, Response
+
 from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
 from app.business_user.schemas import BusinessUserRead
-from .service import (
-    delete_service,
-    read_service,
-    read_by_id_service,
-    create_service,
-    update_service,
-    read_by_business_id_service,
-)
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
-from fastapi import APIRouter, Response
+from app.business_user.service import ReadableBusinessUserService, WritableBusinessUserService
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/business-user", tags=["BusinessUserController"])
 
 
 @router.post("/create")
-async def create(payload: BusinessUserCreateRequest) -> Response:
-    return await create_service(payload)
+async def create(
+    payload: BusinessUserCreateRequest,
+    service: WritableBusinessUserService = Depends(),
+) -> Response:
+    return await service.create(payload)
 
 
 @router.put("/update/{id}")
-async def update(id: str, payload: BusinessUserUpdateRequest) -> Response:
-    return await update_service(id, payload)
+async def update(
+    id: str,
+    payload: BusinessUserUpdateRequest,
+    service: WritableBusinessUserService = Depends(),
+) -> Response:
+    return await service.update(id, payload)
 
 
 @router.delete("/delete/{id}")
-async def delete(id) -> Response:
-    return await delete_service(id)
+async def delete(
+    id: str,
+    service: WritableBusinessUserService = Depends(),
+) -> Response:
+    return await service.delete(id)
 
 
 @router.get("/read")
 async def read(
-    page: int = 1, size: int = 5, search: str | None = None
+    page: int = 1,
+    size: int = 5,
+    search: str | None = None,
+    service: ReadableBusinessUserService = Depends(),
 ) -> PaginatedResponse[BusinessUserRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    return await read_service(param)
+    return await service.read(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[BusinessUserRead]:
-    return await read_by_id_service(id)
+async def read_by_id(
+    id: str,
+    service: ReadableBusinessUserService = Depends(),
+) -> BaseResponse[BusinessUserRead]:
+    return await service.read_by_id(id)
 
 
 @router.get("/read/by-business/{business_id}")
-async def read_by_business_id(business_id: str) -> BaseResponse[list[BusinessUserRead]]:
-    return await read_by_business_id_service(business_id)
-
-
+async def read_by_business_id(
+    business_id: str,
+    service: ReadableBusinessUserService = Depends(),
+) -> BaseResponse[list[BusinessUserRead]]:
+    return await service.read_by_business_id(business_id)

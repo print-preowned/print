@@ -1,43 +1,110 @@
+from __future__ import annotations
+
+import math
+import uuid
+from decimal import Decimal
+
 from fastapi import HTTPException, Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.order_item.model import OrderItemCreateRequest, OrderItemUpdateRequest
-from app.order_item.schemas import OrderItemRead
-from .query import delete_query, read_query, read_by_id_query, create_query, update_query
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.order_item.repository import (
+    count_order_items,
+    create_order_item,
+    list_order_items,
+    read_order_item_by_id,
+    soft_delete_order_item,
+    update_order_item,
+)
+from app.order_item.schemas import OrderItemCreate, OrderItemRead, OrderItemUpdate
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
 
-async def create_service(item: OrderItemCreateRequest) -> Response:
-    await create_query(item)
-    return Response(status_code=201)
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def update_service(id: str, item: OrderItemUpdateRequest) -> Response:
-    update = await update_query(id, item)
-    if update.matched_count == 0:
-        raise HTTPException(status_code=404, detail="OrderItem not found")
-    return Response(status_code=200)
+def _to_read(row) -> OrderItemRead:
+    return OrderItemRead.model_validate(row)
 
 
-async def delete_service(id: str) -> Response:
-    deleted = await delete_query(id)
-    if deleted.matched_count == 0:
-        raise HTTPException(status_code=404, detail="OrderItem not found")
-    return Response(status_code=204)
+def _to_create(payload: OrderItemCreateRequest) -> OrderItemCreate:
+    data = payload.model_dump(include=set(OrderItemCreate.model_fields.keys()))
+    data["order_id"] = _parse_id(str(data["order_id"]))
+    data["variant_id"] = _parse_id(str(data["variant_id"]))
+    data["unit_price"] = Decimal(str(data["unit_price"]))
+    if data.get("discount_applied") is not None:
+        data["discount_applied"] = Decimal(str(data["discount_applied"]))
+    return OrderItemCreate.model_validate(data)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[OrderItemRead]:
-    items = await read_query(params)
-    return PaginatedResponse[OrderItemRead](
-        status_code=200,
-        message="Successful",
-        data=items.data,
-        pagination=items.pagination,
-    )
+class OrderItemService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, item: OrderItemCreateRequest) -> Response:
+        await create_order_item(self._session, _to_create(item))
+        return Response(status_code=201)
+
+    async def update(self, id: str, item: OrderItemUpdateRequest) -> Response:
+        parsed_id = _parse_id(id)
+        update_data = item.model_dump(exclude_unset=True)
+        if "order_id" in update_data and update_data["order_id"] is not None:
+            update_data["order_id"] = _parse_id(str(update_data["order_id"]))
+        if "variant_id" in update_data and update_data["variant_id"] is not None:
+            update_data["variant_id"] = _parse_id(str(update_data["variant_id"]))
+        if "unit_price" in update_data and update_data["unit_price"] is not None:
+            update_data["unit_price"] = Decimal(str(update_data["unit_price"]))
+        if "discount_applied" in update_data and update_data["discount_applied"] is not None:
+            update_data["discount_applied"] = Decimal(str(update_data["discount_applied"]))
+
+        updated = await update_order_item(
+            self._session,
+            parsed_id,
+            OrderItemUpdate.model_validate(update_data),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="OrderItem not found")
+        return Response(status_code=200)
+
+    async def delete(self, id: str) -> Response:
+        parsed_id = _parse_id(id)
+        deleted = await soft_delete_order_item(self._session, parsed_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="OrderItem not found")
+        return Response(status_code=204)
+
+    async def read(self, params: ParamRequest) -> PaginatedResponse[OrderItemRead]:
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+
+        total_results = await count_order_items(self._session)
+        rows = await list_order_items(self._session, offset=offset, limit=size)
+        data = [_to_read(row) for row in rows]
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[OrderItemRead](
+            status_code=200,
+            message="Successful",
+            data=data,
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id(self, id: str) -> BaseResponse[OrderItemRead]:
+        parsed_id = _parse_id(id)
+        row = await read_order_item_by_id(self._session, parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="OrderItem not found")
+        return BaseResponse[OrderItemRead](status_code=200, message="Successful", data=_to_read(row))
 
 
-async def read_by_id_service(id: str) -> BaseResponse[OrderItemRead]:
-    item = await read_by_id_query(id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="OrderItem not found")
-    return BaseResponse[OrderItemRead](status_code=200, message="Successful", data=item)
+from app.utility.service_deps import readable_service, writable_service
 
-
+WritableOrderItemService = writable_service(OrderItemService)
+ReadableOrderItemService = readable_service(OrderItemService)

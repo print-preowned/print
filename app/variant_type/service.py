@@ -1,46 +1,89 @@
+from __future__ import annotations
+
+import math
+import uuid
+
 from fastapi import HTTPException, Response
-from app.variant_type.schemas import ProductOptionRead
-from app.variant_type.model import (
-    VariantTypeCreateRequest,
-    VariantTypeUpdateRequest,
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
+from app.variant_type.repository import (
+    count_product_options,
+    create_product_option,
+    list_product_options,
+    read_product_option_by_id,
+    soft_delete_product_option,
+    update_product_option,
 )
-from .query import delete_query, read_query, read_by_id_query, create_query, update_query
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.variant_type.schemas import ProductOptionCreate, ProductOptionRead, ProductOptionUpdate
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
 
-async def create_service(item: VariantTypeCreateRequest) -> Response:
-    await create_query(item)
-    return Response(status_code=201)
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def update_service(id: str, item: VariantTypeUpdateRequest) -> Response:
-    update = await update_query(id, item)
-    if update.matched_count == 0:
-        raise HTTPException(status_code=404, detail="VariantType not found")
-    return Response(status_code=200)
+def _to_read(row) -> ProductOptionRead:
+    return ProductOptionRead.model_validate(row)
 
 
-async def delete_service(id: str) -> Response:
-    deleted = await delete_query(id)
-    if deleted.matched_count == 0:
-        raise HTTPException(status_code=404, detail="VariantType not found")
-    return Response(status_code=204)
+class VariantTypeService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, item: VariantTypeCreateRequest) -> Response:
+        payload = ProductOptionCreate.model_validate(item.model_dump())
+        await create_product_option(self._session, payload)
+        return Response(status_code=201)
+
+    async def update(self, id: str, item: VariantTypeUpdateRequest) -> Response:
+        parsed_id = _parse_id(id)
+        updated = await update_product_option(
+            self._session,
+            parsed_id,
+            ProductOptionUpdate.model_validate(item.model_dump(exclude_unset=True)),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="VariantType not found")
+        return Response(status_code=200)
+
+    async def delete(self, id: str) -> Response:
+        parsed_id = _parse_id(id)
+        deleted = await soft_delete_product_option(self._session, parsed_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="VariantType not found")
+        return Response(status_code=204)
+
+    async def read(self, params: ParamRequest) -> PaginatedResponse[ProductOptionRead]:
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+
+        total_results = await count_product_options(self._session)
+        rows = await list_product_options(self._session, offset=offset, limit=size)
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[ProductOptionRead](
+            status_code=200,
+            message="Successful",
+            data=[_to_read(row) for row in rows],
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id(self, id: str) -> BaseResponse[ProductOptionRead]:
+        parsed_id = _parse_id(id)
+        row = await read_product_option_by_id(self._session, parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="VariantType not found")
+        return BaseResponse[ProductOptionRead](status_code=200, message="Successful", data=_to_read(row))
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[ProductOptionRead]:
-    items = await read_query(params)
-    return PaginatedResponse[ProductOptionRead](
-        status_code=200,
-        message="Successful",
-        data=items.data,
-        pagination=items.pagination,
-    )
+from app.utility.service_deps import readable_service, writable_service
 
-
-async def read_by_id_service(id: str) -> BaseResponse[ProductOptionRead]:
-    item = await read_by_id_query(id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="VariantType not found")
-    return BaseResponse[ProductOptionRead](status_code=200, message="Successful", data=item)
-
-
+WritableVariantTypeService = writable_service(VariantTypeService)
+ReadableVariantTypeService = readable_service(VariantTypeService)

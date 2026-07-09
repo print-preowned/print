@@ -4,20 +4,20 @@ import math
 import uuid
 
 from fastapi import HTTPException, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
 from app.business_user.repository import (
+    count_business_users,
     create_business_user,
     list_business_users,
     read_business_user_by_id,
     read_business_users_by_business_id,
     soft_delete_business_user,
     update_business_user,
-    count_business_users,
 )
 from app.business_user.schemas import BusinessUserCreate, BusinessUserRead, BusinessUserUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
-from app.utility.postgres import get_sessionmaker
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -47,71 +47,67 @@ def _to_read(row) -> BusinessUserRead:
     return BusinessUserRead.model_validate(row)
 
 
-async def create_service(mapping: BusinessUserCreateRequest) -> Response:
-    async with get_sessionmaker()() as session:
-        await create_business_user(session, _to_create(mapping))
-        await session.commit()
-    return Response(status_code=201)
+class BusinessUserService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
+    async def create(self, mapping: BusinessUserCreateRequest) -> Response:
+        await create_business_user(self._session, _to_create(mapping))
+        return Response(status_code=201)
 
-async def update_service(id: str, mapping: BusinessUserUpdateRequest) -> Response:
-    parsed_id = _parse_id(id)
-    async with get_sessionmaker()() as session:
-        updated = await update_business_user(session, parsed_id, _to_update(mapping))
+    async def update(self, id: str, mapping: BusinessUserUpdateRequest) -> Response:
+        parsed_id = _parse_id(id)
+        updated = await update_business_user(self._session, parsed_id, _to_update(mapping))
         if updated is None:
             raise HTTPException(status_code=404, detail="Mapping not found")
-        await session.commit()
-    return Response(status_code=200)
+        return Response(status_code=200)
 
-
-async def delete_service(id: str) -> Response:
-    parsed_id = _parse_id(id)
-    async with get_sessionmaker()() as session:
-        deleted = await soft_delete_business_user(session, parsed_id)
+    async def delete(self, id: str) -> Response:
+        parsed_id = _parse_id(id)
+        deleted = await soft_delete_business_user(self._session, parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Mapping not found")
-        await session.commit()
-    return Response(status_code=204)
+        return Response(status_code=204)
+
+    async def read(self, params: ParamRequest) -> PaginatedResponse[BusinessUserRead]:
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+
+        total_results = await count_business_users(self._session)
+        rows = await list_business_users(self._session, offset=offset, limit=size)
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[BusinessUserRead](
+            status_code=200,
+            message="Successful",
+            data=[_to_read(row) for row in rows],
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id(self, id: str) -> BaseResponse[BusinessUserRead]:
+        parsed_id = _parse_id(id)
+        row = await read_business_user_by_id(self._session, parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Mapping not found")
+        return BaseResponse[BusinessUserRead](status_code=200, message="Successful", data=_to_read(row))
+
+    async def read_by_business_id(self, business_id: str) -> BaseResponse[list[BusinessUserRead]]:
+        parsed_business_id = _parse_id(business_id)
+        rows = await read_business_users_by_business_id(self._session, parsed_business_id)
+        return BaseResponse[list[BusinessUserRead]](
+            status_code=200,
+            message="Successful",
+            data=[_to_read(row) for row in rows],
+        )
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[BusinessUserRead]:
-    page = max(1, params.page)
-    size = params.size
-    offset = (page - 1) * size
+from app.utility.service_deps import readable_service, writable_service
 
-    async with get_sessionmaker()() as session:
-        total_results = await count_business_users(session)
-        rows = await list_business_users(session, offset=offset, limit=size)
-
-    total_pages = math.ceil(total_results / size) if size else 1
-    return PaginatedResponse[BusinessUserRead](
-        status_code=200,
-        message="Successful",
-        data=[_to_read(row) for row in rows],
-        pagination=Pagination(
-            page=page,
-            size=size,
-            total_pages=total_pages,
-            total_results=total_results,
-        ),
-    )
-
-
-async def read_by_id_service(id: str) -> BaseResponse[BusinessUserRead]:
-    parsed_id = _parse_id(id)
-    async with get_sessionmaker()() as session:
-        row = await read_business_user_by_id(session, parsed_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-    return BaseResponse[BusinessUserRead](status_code=200, message="Successful", data=_to_read(row))
-
-
-async def read_by_business_id_service(business_id: str) -> BaseResponse[list[BusinessUserRead]]:
-    parsed_business_id = _parse_id(business_id)
-    async with get_sessionmaker()() as session:
-        rows = await read_business_users_by_business_id(session, parsed_business_id)
-    return BaseResponse[list[BusinessUserRead]](
-        status_code=200,
-        message="Successful",
-        data=[_to_read(row) for row in rows],
-    )
+WritableBusinessUserService = writable_service(BusinessUserService)
+ReadableBusinessUserService = readable_service(BusinessUserService)

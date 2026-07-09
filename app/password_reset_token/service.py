@@ -1,203 +1,193 @@
-from datetime import datetime, timezone, timedelta
+from __future__ import annotations
+
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException, Response
 from pwdlib import PasswordHash
-import secrets
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.password_reset_token.model import (
     PasswordChangeRequest,
+    PasswordChangeResponse,
+    PasswordResetCompleteRequest,
     PasswordResetRequest,
     PasswordResetValidateResponse,
-    PasswordResetCompleteRequest,
 )
-from app.password_reset_token.query import (
-    create_query,
-    read_by_token_hash_query,
-    mark_as_used_query,
-    hash_token,
+from app.password_reset_token.query import hash_token
+from app.password_reset_token.repository import (
+    create_password_reset_token,
+    mark_password_reset_token_used,
+    read_password_reset_token_by_hash,
 )
+from app.password_reset_token.schemas import PasswordResetTokenCreate
+from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
+from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
+from app.user.repository import read_user_by_email, read_user_by_id, update_user
+from app.user.schemas import UserUpdate
 from app.utility.authorization import TokenPayload
-from app.user.query import read_by_email_query, update_query
-from app.user.model import UserUpdateRequest
+from app.utility.service_deps import readable_service, writable_service
+from app.utility.token import create_platform_token
 
 
 def generate_reset_token() -> str:
     """Generate a random token for password reset"""
-    return secrets.token_urlsafe(32)  # 32 bytes = 43 characters URL-safe
+    return secrets.token_urlsafe(32)
 
 
-async def request_password_reset_service(request: PasswordResetRequest) -> dict:
-    """
-    Request a password reset
-    
-    - Find user by email
-    - Generate random token
-    - Store hash in password_reset_token
-    - Return raw token (should be sent via email)
-    """
-    # Find user by email
-    user = await read_by_email_query(request.email)
-    if not user:
-        # Don't reveal if user exists or not (security best practice)
-        # Return success even if user doesn't exist
+def _parse_user_id(user_id: str) -> uuid.UUID:
+    return uuid.UUID(user_id)
+
+
+class PasswordResetTokenService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def request_password_reset(self, request: PasswordResetRequest) -> dict:
+        row = await read_user_by_email(self._session, request.email)
+        if not row:
+            return {
+                "message": "If an account with that email exists, a password reset link has been sent."
+            }
+
+        raw_token = generate_reset_token()
+        token_hash = hash_token(raw_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        await create_password_reset_token(
+            self._session,
+            PasswordResetTokenCreate(
+                user_id=row.id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            ),
+        )
+
         return {
-            "message": "If an account with that email exists, a password reset link has been sent."
+            "message": "If an account with that email exists, a password reset link has been sent.",
+            "token": raw_token,
+            "expires_at": expires_at.isoformat(),
         }
-    
-    # Generate random token
-    raw_token = generate_reset_token()
-    token_hash = hash_token(raw_token)
-    
-    # Calculate expiration (1 hour)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-    
-    # Create reset token with hashed token
-    token_id = await create_query(
-        user.id,
-        token_hash,
-        expires_at
-    )
-    
-    # TODO: Send raw token via email
-    # For now, return it in the response (should be removed in production)
-    return {
-        "message": "If an account with that email exists, a password reset link has been sent.",
-        "token": raw_token,  # Only returned for development - should be sent via email
-        "expires_at": expires_at.isoformat(),
-    }
 
+    async def validate_reset_token(self, token: str) -> PasswordResetValidateResponse:
+        token_hash = hash_token(token)
+        row = await read_password_reset_token_by_hash(self._session, token_hash)
 
-async def validate_reset_token_service(token: str) -> PasswordResetValidateResponse:
-    """
-    Validate a password reset token
-    
-    - Hash token
-    - Find token by hash
-    - Ensure not expired
-    - Ensure not used
-    """
-    # Hash the token
-    token_hash = hash_token(token)
-    
-    # Find token by hash
-    reset_token = await read_by_token_hash_query(token_hash)
-    
-    if not reset_token:
-        return PasswordResetValidateResponse(
-            valid=False,
-            message="Invalid or expired reset token"
-        )
-    
-    # Check if already used
-    if reset_token.used:
-        return PasswordResetValidateResponse(
-            valid=False,
-            message="This reset token has already been used"
-        )
-    
-    # Check expiration
-    if reset_token.expires_at < datetime.now(timezone.utc):
-        return PasswordResetValidateResponse(
-            valid=False,
-            message="This reset token has expired"
-        )
-    
-    return PasswordResetValidateResponse(
-        valid=True,
-        message="Token is valid"
-    )
-
-
-async def complete_password_reset_service(complete_request: PasswordResetCompleteRequest) -> Response:
-    """
-    Complete password reset
-    
-    - Validate token
-    - Update user password
-    - Mark token as used
-    """
-    # Validate token
-    validation = await validate_reset_token_service(complete_request.token)
-    if not validation.valid:
-        raise HTTPException(
-            status_code=400,
-            detail=validation.message or "Invalid or expired reset token"
-        )
-    
-    # Get the token record
-    token_hash = hash_token(complete_request.token)
-    reset_token = await read_by_token_hash_query(token_hash)
-    if not reset_token:
-        raise HTTPException(status_code=400, detail="Invalid reset token")
-    
-    # Hash new password
-    password_hash = PasswordHash.recommended()
-    hashed_password = password_hash.hash(complete_request.new_password)
-    
-    # Update user password
-    update_data = UserUpdateRequest(password=hashed_password)
-    await update_query(str(reset_token.user_id), update_data)
-    
-    # Mark token as used
-    await mark_as_used_query(str(reset_token.id))
-    
-    return Response(status_code=200)
-
-
-async def change_password_service(
-    token_payload: TokenPayload,
-    change_request: PasswordChangeRequest,
-):
-    """
-    Change password (authenticated user)
-    
-    - Verify current password
-    - Update to new password
-    """
-    from app.user.query import read_by_id_query
-    from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
-    from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
-    from app.utility.token import create_platform_token
-    from app.password_reset_token.model import PasswordChangeResponse
-
-    user_id = token_payload.sub
-
-    # Get user
-    user = await read_by_id_query(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Verify current password
-    password_hash = PasswordHash.recommended()
-    is_valid = password_hash.verify(change_request.current_password, user.password)
-    if not is_valid:
-        raise HTTPException(status_code=403, detail="Current password is incorrect")
-    
-    was_new = user.status == "NEW"
-
-    # Hash new password
-    hashed_password = password_hash.hash(change_request.new_password)
-    
-    # Update user password
-    update_data = UserUpdateRequest(password=hashed_password)
-    await update_query(user_id, update_data)
-    
-    # If user status is "NEW", update to "ACTIVE" (password change completed)
-    if was_new:
-        await update_query(user_id, UserUpdateRequest(status="ACTIVE"))
-
-    new_token: str | None = None
-    if token_payload.ctx == "PLATFORM":
-        platform_user = await read_platform_user_by_user_id_query(user_id)
-        if platform_user:
-            privilege_mappings = await read_by_privilege_set_id_query(
-                str(platform_user.platform_privilege_set_id)
+        if not row:
+            return PasswordResetValidateResponse(
+                valid=False,
+                message="Invalid or expired reset token",
             )
-            privileges = [mapping.privilege_code for mapping in privilege_mappings]
-            updated_user = await read_by_id_query(user_id)
-            if updated_user:
-                new_token = create_platform_token(
-                    updated_user,
-                    privileges,
-                    password_change_required=False,
-                )
 
-    return PasswordChangeResponse(token=new_token)
+        if row.used:
+            return PasswordResetValidateResponse(
+                valid=False,
+                message="This reset token has already been used",
+            )
+
+        if row.expires_at < datetime.now(timezone.utc):
+            return PasswordResetValidateResponse(
+                valid=False,
+                message="This reset token has expired",
+            )
+
+        return PasswordResetValidateResponse(
+            valid=True,
+            message="Token is valid",
+        )
+
+    async def complete_password_reset(self, complete_request: PasswordResetCompleteRequest) -> Response:
+        validation = await self.validate_reset_token(complete_request.token)
+        if not validation.valid:
+            raise HTTPException(
+                status_code=400,
+                detail=validation.message or "Invalid or expired reset token",
+            )
+
+        token_hash = hash_token(complete_request.token)
+        reset_token = await read_password_reset_token_by_hash(self._session, token_hash)
+        if not reset_token:
+            raise HTTPException(status_code=400, detail="Invalid reset token")
+
+        password_hash = PasswordHash.recommended()
+        hashed_password = password_hash.hash(complete_request.new_password)
+
+        updated = await update_user(
+            self._session,
+            reset_token.user_id,
+            UserUpdate(password=hashed_password),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        marked = await mark_password_reset_token_used(self._session, reset_token.id)
+        if not marked:
+            raise HTTPException(status_code=400, detail="Invalid reset token")
+
+        return Response(status_code=200)
+
+    async def change_password(
+        self,
+        token_payload: TokenPayload,
+        change_request: PasswordChangeRequest,
+    ) -> PasswordChangeResponse:
+        user_id = token_payload.sub
+        parsed_user_id = _parse_user_id(user_id)
+
+        row = await read_user_by_id(self._session, parsed_user_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        password_hash = PasswordHash.recommended()
+        is_valid = password_hash.verify(change_request.current_password, row.password)
+        if not is_valid:
+            raise HTTPException(status_code=403, detail="Current password is incorrect")
+
+        was_new = row.status == "NEW"
+        hashed_password = password_hash.hash(change_request.new_password)
+
+        updated = await update_user(
+            self._session,
+            parsed_user_id,
+            UserUpdate(password=hashed_password),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if was_new:
+            status_updated = await update_user(
+                self._session,
+                parsed_user_id,
+                UserUpdate(status="ACTIVE"),
+            )
+            if status_updated is None:
+                raise HTTPException(status_code=404, detail="User not found")
+
+        new_token: str | None = None
+        if token_payload.ctx == "PLATFORM":
+            platform_user = await read_platform_user_by_user_id_query(user_id)
+            if platform_user:
+                privilege_mappings = await read_by_privilege_set_id_query(
+                    str(platform_user.platform_privilege_set_id)
+                )
+                privileges = [mapping.privilege_code for mapping in privilege_mappings]
+                updated_row = await read_user_by_id(self._session, parsed_user_id)
+                if updated_row:
+                    from app.user.schemas import UserRead
+
+                    new_token = create_platform_token(
+                        UserRead.model_validate(updated_row),
+                        privileges,
+                        password_change_required=False,
+                    )
+
+        return PasswordChangeResponse(token=new_token)
+
+
+class WritablePasswordResetTokenService(writable_service(PasswordResetTokenService)):
+    pass
+
+
+class ReadablePasswordResetTokenService(readable_service(PasswordResetTokenService)):
+    pass

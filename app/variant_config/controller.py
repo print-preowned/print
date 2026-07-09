@@ -1,44 +1,52 @@
-from app.variant_config.model import (
-    VariantConfig,
-    VariantConfigCreateRequest,
-    VariantConfigUpdateRequest,
-)
-from .service import (
-    delete_service,
-    read_service,
-    read_by_id_service,
-    create_service,
-    update_service,
-)
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
+
+from app.variant_config.model import VariantConfigCreateRequest, VariantConfigUpdateRequest
+from app.variant_config.schemas import VariantProductOptionValueRead
+from app.variant_config.service import ReadableVariantConfigService, WritableVariantConfigService
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/variant-config", tags=["VariantConfigController"])
 
 
 @router.post("/create")
-async def create(payload: VariantConfigCreateRequest) -> Response:
-    return await create_service(payload)
+async def create(
+    payload: VariantConfigCreateRequest,
+    service: WritableVariantConfigService = Depends(),
+) -> Response:
+    return await service.create(payload)
 
 
 @router.put("/update/{id}")
-async def update(id: str, payload: VariantConfigUpdateRequest) -> Response:
-    return await update_service(id, payload)
+async def update(
+    id: str,
+    payload: VariantConfigUpdateRequest,
+    service: WritableVariantConfigService = Depends(),
+) -> Response:
+    return await service.update(id, payload)
 
 
 @router.delete("/delete/{id}")
-async def delete(id) -> Response:
-    return await delete_service(id)
+async def delete(
+    id: str,
+    service: WritableVariantConfigService = Depends(),
+) -> Response:
+    return await service.delete(id)
 
 
 @router.get("/read")
 async def read(
-    page: int = 1, size: int = 5, search: str | None = None
-) -> PaginatedResponse[VariantConfig]:
+    page: int = 1,
+    size: int = 5,
+    search: str | None = None,
+    service: ReadableVariantConfigService = Depends(),
+) -> PaginatedResponse[VariantProductOptionValueRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    return await read_service(param)
+    return await service.read(param)
 
 
 @router.get("/read/by-id/{id}")
-async def read_by_id(id: str) -> BaseResponse[VariantConfig]:
-    return await read_by_id_service(id)
+async def read_by_id(
+    id: str,
+    service: ReadableVariantConfigService = Depends(),
+) -> BaseResponse[VariantProductOptionValueRead]:
+    return await service.read_by_id(id)

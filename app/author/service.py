@@ -1,61 +1,111 @@
+from __future__ import annotations
+
+import math
+import uuid
+
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
-from app.author.schemas import AuthorRead
-from .query import (
-    delete_query,
-    read_query,
-    read_by_id_query,
-    create_query,
-    update_query,
+from app.author.repository import (
+    count_authors,
+    create_author,
+    list_authors,
+    read_author_by_id,
+    soft_delete_author,
+    update_author,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.author.schemas import AuthorCreate, AuthorRead, AuthorUpdate
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.service_deps import readable_service, writable_service
 
 
-async def create_service(author: AuthorCreateRequest) -> Response:
-    inserted_id = await create_query(author)
-    return JSONResponse(
-        status_code=201,
-        content={"id": str(inserted_id), "message": "Author created"},
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
+
+
+def _to_read(row) -> AuthorRead:
+    return AuthorRead.model_validate(row)
+
+
+def _to_create(payload: AuthorCreateRequest) -> AuthorCreate:
+    return AuthorCreate.model_validate(
+        payload.model_dump(include=set(AuthorCreate.model_fields.keys()))
     )
 
 
-async def update_service(id: str, author: AuthorUpdateRequest) -> Response:
-    update = await update_query(id, author)
+class AuthorService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
-    if update.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Author not found")
+    async def create(self, author: AuthorCreateRequest) -> Response:
+        created = await create_author(self._session, _to_create(author))
+        return JSONResponse(
+            status_code=201,
+            content={"id": str(created.id), "message": "Author created"},
+        )
 
-    return Response(status_code=200)
+    async def update(self, id: str, author: AuthorUpdateRequest) -> Response:
+        updated = await update_author(
+            self._session,
+            _parse_id(id),
+            AuthorUpdate.model_validate(author.model_dump(exclude_unset=True)),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Author not found")
+        return Response(status_code=200)
+
+    async def delete(self, id: str) -> Response:
+        deleted = await soft_delete_author(self._session, _parse_id(id))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Author not found")
+        return Response(status_code=204)
+
+    async def read(self, params: ParamRequest) -> PaginatedResponse[AuthorRead]:
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+
+        total_results = await count_authors(self._session)
+        rows = await list_authors(self._session, offset=offset, limit=size)
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[AuthorRead](
+            status_code=200,
+            message="Successful",
+            data=[_to_read(row) for row in rows],
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id(self, id: str) -> BaseResponse[AuthorRead]:
+        row = await read_author_by_id(self._session, _parse_id(id))
+        if row is None:
+            raise HTTPException(status_code=404, detail="Author not found")
+        return BaseResponse[AuthorRead](
+            status_code=200,
+            message="Successful",
+            data=_to_read(row),
+        )
+
+    async def merge(self, source_author_id: str, target_author_id: str) -> Response:
+        raise HTTPException(status_code=501, detail="Not implemented yet")
+
+    async def promote(self, id: str) -> Response:
+        raise HTTPException(status_code=501, detail="Not implemented yet")
+
+    async def deprecate(self, id: str) -> Response:
+        raise HTTPException(status_code=501, detail="Not implemented yet")
 
 
-async def delete_service(id: str) -> Response:
-    deleted = await delete_query(id)
-
-    if deleted.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Author not found")
-
-    return Response(status_code=204)
+class WritableAuthorService(writable_service(AuthorService)):
+    pass
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[AuthorRead]:
-    authors = await read_query(params)
-    response = PaginatedResponse[AuthorRead](
-        status_code=200,
-        message="Successful",
-        data=authors.data,
-        pagination=authors.pagination,
-    )
-
-    return response
-
-
-async def read_by_id_service(id: str) -> BaseResponse[AuthorRead]:
-    author = await read_by_id_query(id)
-
-    if author is None:
-        raise HTTPException(status_code=404, detail="Author not found")
-
-    response = BaseResponse[AuthorRead](status_code=200, message="Successful", data=author)
-
-    return response
+class ReadableAuthorService(readable_service(AuthorService)):
+    pass

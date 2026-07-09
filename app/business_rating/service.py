@@ -1,55 +1,114 @@
+from __future__ import annotations
+
+import math
+import uuid
+
 from fastapi import HTTPException, Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.business_rating.model import BusinessRatingCreateRequest, BusinessRatingUpdateRequest
-from app.business_rating.schemas import BusinessRatingRead
-from .query import (
-    delete_query,
-    read_query,
-    read_by_id_query,
-    create_query,
-    update_query,
-    read_by_business_id_query,
+from app.business_rating.repository import (
+    count_business_ratings,
+    create_business_rating,
+    list_business_ratings,
+    read_business_rating_by_id,
+    read_by_business_id,
+    soft_delete_business_rating,
+    update_business_rating,
 )
-from ..utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.business_rating.schemas import BusinessRatingCreate, BusinessRatingRead, BusinessRatingUpdate
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
 
-async def create_service(rating: BusinessRatingCreateRequest) -> Response:
-    await create_query(rating)
-    return Response(status_code=201)
+def _parse_id(value: str) -> uuid.UUID:
+    return uuid.UUID(value)
 
 
-async def update_service(id: str, rating: BusinessRatingUpdateRequest) -> Response:
-    update = await update_query(id, rating)
-    if update.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Rating not found")
-    return Response(status_code=200)
+def _to_read(row) -> BusinessRatingRead:
+    return BusinessRatingRead.model_validate(row)
 
 
-async def delete_service(id: str) -> Response:
-    deleted = await delete_query(id)
-    if deleted.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Rating not found")
-    return Response(status_code=204)
+def _to_create(payload: BusinessRatingCreateRequest) -> BusinessRatingCreate:
+    data = payload.model_dump(include=set(BusinessRatingCreate.model_fields.keys()))
+    data["business_id"] = _parse_id(str(data["business_id"]))
+    data["user_id"] = _parse_id(str(data["user_id"]))
+    if data.get("order_item_id") is not None:
+        data["order_item_id"] = _parse_id(str(data["order_item_id"]))
+    return BusinessRatingCreate.model_validate(data)
 
 
-async def read_service(params: ParamRequest) -> PaginatedResponse[BusinessRatingRead]:
-    ratings = await read_query(params)
-    return PaginatedResponse[BusinessRatingRead](
-        status_code=200,
-        message="Successful",
-        data=ratings.data,
-        pagination=ratings.pagination,
-    )
+class BusinessRatingService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, rating: BusinessRatingCreateRequest) -> Response:
+        await create_business_rating(self._session, _to_create(rating))
+        return Response(status_code=201)
+
+    async def update(self, id: str, rating: BusinessRatingUpdateRequest) -> Response:
+        parsed_id = _parse_id(id)
+        update_data = rating.model_dump(exclude_unset=True)
+        if "business_id" in update_data and update_data["business_id"] is not None:
+            update_data["business_id"] = _parse_id(str(update_data["business_id"]))
+        if "user_id" in update_data and update_data["user_id"] is not None:
+            update_data["user_id"] = _parse_id(str(update_data["user_id"]))
+        if "order_item_id" in update_data and update_data["order_item_id"] is not None:
+            update_data["order_item_id"] = _parse_id(str(update_data["order_item_id"]))
+
+        updated = await update_business_rating(
+            self._session,
+            parsed_id,
+            BusinessRatingUpdate.model_validate(update_data),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Rating not found")
+        return Response(status_code=200)
+
+    async def delete(self, id: str) -> Response:
+        parsed_id = _parse_id(id)
+        deleted = await soft_delete_business_rating(self._session, parsed_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Rating not found")
+        return Response(status_code=204)
+
+    async def read(self, params: ParamRequest) -> PaginatedResponse[BusinessRatingRead]:
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+
+        total_results = await count_business_ratings(self._session)
+        rows = await list_business_ratings(self._session, offset=offset, limit=size)
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[BusinessRatingRead](
+            status_code=200,
+            message="Successful",
+            data=[_to_read(row) for row in rows],
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id(self, id: str) -> BaseResponse[BusinessRatingRead]:
+        parsed_id = _parse_id(id)
+        row = await read_business_rating_by_id(self._session, parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Rating not found")
+        return BaseResponse[BusinessRatingRead](status_code=200, message="Successful", data=_to_read(row))
+
+    async def read_by_business_id(self, business_id: str) -> BaseResponse[list[BusinessRatingRead]]:
+        rows = await read_by_business_id(self._session, _parse_id(business_id))
+        return BaseResponse[list[BusinessRatingRead]](
+            status_code=200,
+            message="Successful",
+            data=[_to_read(row) for row in rows],
+        )
 
 
-async def read_by_id_service(id: str) -> BaseResponse[BusinessRatingRead]:
-    rating = await read_by_id_query(id)
-    if rating is None:
-        raise HTTPException(status_code=404, detail="Rating not found")
-    return BaseResponse[BusinessRatingRead](status_code=200, message="Successful", data=rating)
+from app.utility.service_deps import readable_service, writable_service
 
-
-async def read_by_business_id_service(business_id: str) -> BaseResponse[list[BusinessRatingRead]]:
-    data = await read_by_business_id_query(business_id)
-    return BaseResponse[list[BusinessRatingRead]](status_code=200, message="Successful", data=data)
-
-
+WritableBusinessRatingService = writable_service(BusinessRatingService)
+ReadableBusinessRatingService = readable_service(BusinessRatingService)
