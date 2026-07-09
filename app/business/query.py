@@ -5,15 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.business.model import BusinessCreateRequest, BusinessUpdateRequest
-from app.business.repository import (
-    create_business,
-    list_businesses,
-    read_business_by_id,
-    read_business_by_user_id,
-    delete_business,
-    update_business,
-    count_businesses,
-)
+from app.business.repository import BusinessRepository
 from app.business.schemas import BusinessCreate, BusinessRead, BusinessUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -47,14 +39,14 @@ async def create_query(business: BusinessCreateRequest) -> None:
         business.model_dump() | {"user_id": uuid.UUID(str(business.user_id))}
     )
     async with get_sessionmaker()() as session:
-        await create_business(session, payload)
+        await BusinessRepository(session).create(payload)
         await session.commit()
 
 
 async def update_query(id: str, business: BusinessUpdateRequest) -> UpdateResult:
     parsed_id = _parse_business_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_business(session, parsed_id, _to_business_update(business))
+        updated = await BusinessRepository(session).update(parsed_id, _to_business_update(business))
         if updated is None:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -64,7 +56,7 @@ async def update_query(id: str, business: BusinessUpdateRequest) -> UpdateResult
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_business_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await delete_business(session, parsed_id)
+        deleted = await BusinessRepository(session).delete(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -77,8 +69,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[BusinessRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_businesses(session)
-        rows = await list_businesses(session, offset=offset, limit=size)
+        total_results = await BusinessRepository(session).count()
+        rows = await BusinessRepository(session).list(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -94,11 +86,11 @@ async def read_query(params: ParamRequest) -> PaginatedData[BusinessRead]:
 
 async def read_by_id_query(id: str) -> BusinessRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_business_by_id(session, _parse_business_id(id))
+        row = await BusinessRepository(session).read_by_id(_parse_business_id(id))
     return _to_read(row) if row else None
 
 
 async def read_by_user_id_query(user_id: str) -> BusinessRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_business_by_user_id(session, uuid.UUID(user_id))
+        row = await BusinessRepository(session).read_by_user_id(uuid.UUID(user_id))
     return _to_read(row) if row else None

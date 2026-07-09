@@ -13,9 +13,8 @@ from app.business_user.query import read_one_by_user_id_query
 from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
 from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
 from app.role.model import OWNER_ROLE_CODE
-from app.role.repository import read_role_by_code as read_role_by_code_pg
-from app.role.repository import read_role_by_id as read_role_by_id_pg
-from app.role_privilege.repository import read_privilege_codes_by_role_id as read_privilege_codes_by_role_id_pg
+from app.role.repository import RoleRepository
+from app.role_privilege.repository import RolePrivilegeRepository
 from app.user.model import (
     ContextSwitchResponse,
     LoginRequest,
@@ -24,14 +23,13 @@ from app.user.model import (
     UserUpdateRequest,
 )
 from app.user.orm import UserOrm
+from app.user.repository import UserRepository
 from app.user.schemas import UserRead, UserSignup, UserUpdate
 from app.utility.authorization import TokenPayload
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.redis import set_key
 from app.utility.service_deps import readable_service, writable_service
 from app.utility.token import create_business_token, create_customer_token, create_platform_token
-
-from . import repository
 
 
 def _parse_user_id(user_id: str) -> uuid.UUID:
@@ -56,6 +54,9 @@ def _to_user_update(payload: UserUpdateRequest) -> UserUpdate:
 class UserService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = UserRepository(session)
+        self._role_repo = RoleRepository(session)
+        self._role_privilege_repo = RolePrivilegeRepository(session)
 
     async def login(
         self,
@@ -63,7 +64,7 @@ class UserService:
         login_request: LoginRequest,
         is_platform: bool = False,
     ) -> LoginResponse:
-        row = await repository.read_user_by_email(self._session, login_request.email)
+        row = await self._repo.read_user_by_email(login_request.email)
         if row is None:
             raise HTTPException(status_code=403, detail="Invalid credentials")
 
@@ -105,7 +106,7 @@ class UserService:
         )
 
     async def signup(self, request: Request, user: SignupRequest) -> LoginResponse:
-        existing = await repository.read_user_by_email(self._session, user.email)
+        existing = await self._repo.read_user_by_email(user.email)
         if existing is not None:
             raise HTTPException(
                 status_code=409,
@@ -120,7 +121,7 @@ class UserService:
             )
         )
         try:
-            created = await repository.signup_user(self._session, payload)
+            created = await self._repo.signup_user(payload)
         except IntegrityError as exc:
             raise HTTPException(
                 status_code=409,
@@ -142,7 +143,7 @@ class UserService:
     async def update(self, id: str, user: UserUpdateRequest) -> Response:
         parsed_id = _parse_user_id(id)
         try:
-            updated = await repository.update_user(self._session, parsed_id, _to_user_update(user))
+            updated = await self._repo.update_user(parsed_id, _to_user_update(user))
         except IntegrityError as exc:
             raise HTTPException(status_code=409, detail="Email already in use") from exc
         if updated is None:
@@ -151,7 +152,7 @@ class UserService:
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_user_id(id)
-        deleted = await repository.soft_delete_user(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_user(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="User not found")
         return Response(status_code=204)
@@ -161,8 +162,8 @@ class UserService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await repository.count_users(self._session)
-        rows = await repository.list_users(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_users()
+        rows = await self._repo.list_users(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[UserRead](
@@ -179,7 +180,7 @@ class UserService:
 
     async def read_by_id(self, id: str) -> BaseResponse[UserRead]:
         parsed_id = _parse_user_id(id)
-        row = await repository.read_user_by_id(self._session, parsed_id)
+        row = await self._repo.read_user_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
         return BaseResponse[UserRead](status_code=200, message="Successful", data=_to_read(row))
@@ -190,7 +191,7 @@ class UserService:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Role not found") from exc
 
-        rows = await repository.read_users_by_role_id(self._session, parsed_role_id)
+        rows = await self._repo.read_users_by_role_id(parsed_role_id)
         return BaseResponse[list[UserRead]](
             status_code=200,
             message="Successful",
@@ -198,7 +199,7 @@ class UserService:
         )
 
     async def read_by_email(self, email: str) -> BaseResponse[UserRead]:
-        row = await repository.read_user_by_email(self._session, email)
+        row = await self._repo.read_user_by_email(email)
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
         return BaseResponse[UserRead](status_code=200, message="Successful", data=_to_read(row))
@@ -223,7 +224,7 @@ class UserService:
         user_id = token_payload.sub
         parsed_user_id = _parse_user_id(user_id)
 
-        row = await repository.read_user_by_id(self._session, parsed_user_id)
+        row = await self._repo.read_user_by_id(parsed_user_id)
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
         user = _to_read(row)
@@ -245,7 +246,7 @@ class UserService:
             is_system_role = False
 
             if is_owner:
-                owner_role = await read_role_by_code_pg(self._session, OWNER_ROLE_CODE)
+                owner_role = await self._role_repo.read_role_by_code(OWNER_ROLE_CODE)
                 if owner_role is None:
                     raise HTTPException(
                         status_code=500,
@@ -253,11 +254,15 @@ class UserService:
                     )
                 role_id = str(owner_role.id)
                 role_name = owner_role.name
-                privileges = await read_privilege_codes_by_role_id_pg(self._session, owner_role.id)
+                privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
+                    owner_role.id
+                )
             else:
                 role_id = str(membership.role_id)
-                role_record = await read_role_by_id_pg(self._session, membership.role_id)
-                privileges = await read_privilege_codes_by_role_id_pg(self._session, membership.role_id)
+                role_record = await self._role_repo.read_role_by_id(membership.role_id)
+                privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
+                    membership.role_id
+                )
                 role_name = role_record.name if role_record else "Member"
 
             token = create_business_token(

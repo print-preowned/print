@@ -5,16 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.platform_user.model import PlatformUserCreateRequest, PlatformUserUpdateRequest
-from app.platform_user.repository import (
-    create_platform_user,
-    list_platform_users,
-    read_active_by_privilege_set_id,
-    read_platform_user_by_id,
-    read_platform_user_by_user_id,
-    soft_delete_platform_user,
-    update_platform_user,
-    count_platform_users,
-)
+from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.schemas import PlatformUserCreate, PlatformUserRead, PlatformUserUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -49,14 +40,16 @@ def _to_update(payload: PlatformUserUpdateRequest) -> PlatformUserUpdate:
 
 async def create_query(platform_user: PlatformUserCreateRequest) -> None:
     async with get_sessionmaker()() as session:
-        await create_platform_user(session, _to_create(platform_user))
+        await PlatformUserRepository(session).create_platform_user(_to_create(platform_user))
         await session.commit()
 
 
 async def update_query(id: str, platform_user: PlatformUserUpdateRequest) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_platform_user(session, parsed_id, _to_update(platform_user))
+        updated = await PlatformUserRepository(session).update_platform_user(
+            parsed_id, _to_update(platform_user)
+        )
         if updated is None:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -66,7 +59,7 @@ async def update_query(id: str, platform_user: PlatformUserUpdateRequest) -> Upd
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_platform_user(session, parsed_id)
+        deleted = await PlatformUserRepository(session).soft_delete_platform_user(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -79,8 +72,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[PlatformUserRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_platform_users(session)
-        rows = await list_platform_users(session, offset=offset, limit=size)
+        total_results = await PlatformUserRepository(session).count_platform_users()
+        rows = await PlatformUserRepository(session).list_platform_users(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -97,14 +90,14 @@ async def read_query(params: ParamRequest) -> PaginatedData[PlatformUserRead]:
 async def read_by_id_query(id: str) -> PlatformUserRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_platform_user_by_id(session, parsed_id)
+        row = await PlatformUserRepository(session).read_platform_user_by_id(parsed_id)
     return _to_read(row) if row else None
 
 
 async def read_by_user_id_query(user_id: str) -> PlatformUserRead | None:
     parsed_user_id = _parse_id(user_id)
     async with get_sessionmaker()() as session:
-        row = await read_platform_user_by_user_id(session, parsed_user_id)
+        row = await PlatformUserRepository(session).read_platform_user_by_user_id(parsed_user_id)
     return _to_read(row) if row else None
 
 
@@ -113,5 +106,5 @@ async def read_active_by_privilege_set_id_query(
 ) -> PlatformUserRead | None:
     parsed_id = _parse_id(privilege_set_id)
     async with get_sessionmaker()() as session:
-        row = await read_active_by_privilege_set_id(session, parsed_id)
+        row = await PlatformUserRepository(session).read_active_by_privilege_set_id(parsed_id)
     return _to_read(row) if row else None

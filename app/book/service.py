@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections import defaultdict
 import uuid
+from collections import defaultdict
 
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
@@ -17,19 +17,32 @@ from app.book.model import (
     BookUploadUrlResponse,
     GenreRef,
 )
+from app.book.repository import BookRepository
 from app.book.schemas import BookRead
 from app.book_author.model import BookAuthorCreateRequest
 from app.book_author.query import (
     create_query as create_book_author_query,
+)
+from app.book_author.query import (
     delete_by_book_and_author_query,
+)
+from app.book_author.query import (
     read_by_book_id_query as read_book_authors,
+)
+from app.book_author.query import (
     read_by_book_ids_query as read_book_authors_batch,
 )
 from app.book_genre.model import BookGenreCreateRequest
 from app.book_genre.query import (
     create_query as create_book_genre_query,
+)
+from app.book_genre.query import (
     delete_by_book_and_genre_query,
+)
+from app.book_genre.query import (
     read_by_book_id_query as read_book_genres,
+)
+from app.book_genre.query import (
     read_by_book_ids_query as read_book_genres_batch,
 )
 from app.genre.query import read_by_ids_query as read_genres_by_ids
@@ -147,6 +160,7 @@ def _to_book_read_response(
 class BookService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = BookRepository(session)
 
     async def create(self, book: BookCreateRequest) -> Response:
         staging_key = staging_key_from_image(book.image) if book.image else None
@@ -263,8 +277,12 @@ class BookService:
         data: list[BookReadResponse] = []
         for book in books:
             bid = str(book.id)
-            author_refs = [author_map[aid] for aid in author_ids_by_book.get(bid, []) if aid in author_map]
-            genre_refs = [genre_map[gid] for gid in genre_ids_by_book.get(bid, []) if gid in genre_map]
+            author_refs = [
+                author_map[aid] for aid in author_ids_by_book.get(bid, []) if aid in author_map
+            ]
+            genre_refs = [
+                genre_map[gid] for gid in genre_ids_by_book.get(bid, []) if gid in genre_map
+            ]
             data.append(_to_book_read_response(book, author_refs, genre_refs))
 
         return PaginatedResponse[BookReadResponse](
@@ -308,9 +326,7 @@ class BookService:
             upload_url=upload_url,
             url=create_object_url(object_key),
         )
-        return BaseResponse[BookUploadUrlResponse](
-            status_code=200, message="Successful", data=data
-        )
+        return BaseResponse[BookUploadUrlResponse](status_code=200, message="Successful", data=data)
 
 
 class WritableBookService(writable_service(BookService)):

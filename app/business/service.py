@@ -11,13 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.business.model import BusinessCreateRequest, BusinessCreateResponse, BusinessUpdateRequest
 from app.business.repository import BusinessRepository
 from app.business.schemas import BusinessCreate, BusinessRead, BusinessUpdate
-from app.business_user.repository import create_business_user
+from app.business_user.repository import BusinessUserRepository
 from app.business_user.schemas import BusinessUserCreate
 from app.role.model import OWNER_ROLE_CODE
-from app.role.repository import read_role_by_code
-from app.user.repository import read_user_by_id
+from app.role.repository import RoleRepository
+from app.user.repository import UserRepository
 from app.user.schemas import UserRead
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 from app.utility.token import create_customer_token
 
@@ -52,6 +52,9 @@ class BusinessService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = BusinessRepository(session)
+        self._user_repo = UserRepository(session)
+        self._role_repo = RoleRepository(session)
+        self._business_user_repo = BusinessUserRepository(session)
 
     async def create(
         self,
@@ -59,7 +62,7 @@ class BusinessService:
         user_id: str,
     ) -> BusinessCreateResponse:
         parsed_user_id = _parse_user_id(user_id)
-        user_row = await read_user_by_id(self._session, parsed_user_id)
+        user_row = await self._user_repo.read_user_by_id(parsed_user_id)
         if user_row is None:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -70,7 +73,7 @@ class BusinessService:
                 detail="You already have a business. Each user can only create one business.",
             )
 
-        owner_role = await read_role_by_code(self._session, OWNER_ROLE_CODE)
+        owner_role = await self._role_repo.read_role_by_code(OWNER_ROLE_CODE)
         if owner_role is None:
             raise HTTPException(
                 status_code=404,
@@ -86,8 +89,7 @@ class BusinessService:
                     logo=business.logo,
                 ),
             )
-            await create_business_user(
-                self._session,
+            await self._business_user_repo.create_business_user(
                 BusinessUserCreate(
                     business_id=created_business.id,
                     user_id=parsed_user_id,

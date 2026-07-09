@@ -6,14 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from app.book.model import BookCreateRequest, BookUpdateRequest
-from app.book.repository import (
-    create_book,
-    list_books,
-    read_book_by_id,
-    soft_delete_book,
-    update_book,
-    count_books,
-)
+from app.book.repository import BookRepository
 from app.book.schemas import BookCreate, BookRead, BookUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -37,7 +30,7 @@ async def create_query(book: BookCreateRequest) -> str:
         book.model_dump(include=set(BookCreate.model_fields.keys()))
     )
     async with get_sessionmaker()() as session:
-        created = await create_book(session, payload)
+        created = await BookRepository(session).create_book(payload)
         await session.commit()
         return str(created.id)
 
@@ -45,10 +38,11 @@ async def create_query(book: BookCreateRequest) -> str:
 async def update_query(id: str, book: BookUpdateRequest) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_book(
-            session,
+        updated = await BookRepository(session).update_book(
             parsed_id,
-            BookUpdate.model_validate(book.model_dump(exclude_unset=True, exclude={"author_ids", "genre_ids"})),
+            BookUpdate.model_validate(
+                book.model_dump(exclude_unset=True, exclude={"author_ids", "genre_ids"})
+            ),
         )
         if updated is None:
             return UpdateResult(matched_count=0)
@@ -59,7 +53,7 @@ async def update_query(id: str, book: BookUpdateRequest) -> UpdateResult:
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_book(session, parsed_id)
+        deleted = await BookRepository(session).soft_delete_book(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -72,8 +66,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[BookRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_books(session)
-        rows = await list_books(session, offset=offset, limit=size)
+        total_results = await BookRepository(session).count_books()
+        rows = await BookRepository(session).list_books(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -90,5 +84,5 @@ async def read_query(params: ParamRequest) -> PaginatedData[BookRead]:
 async def read_by_id_query(id: str) -> BookRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_book_by_id(session, parsed_id)
+        row = await BookRepository(session).read_book_by_id(parsed_id)
     return _to_read(row) if row else None

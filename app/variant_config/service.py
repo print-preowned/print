@@ -6,21 +6,14 @@ import uuid
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.variant_config.model import VariantConfigCreateRequest, VariantConfigUpdateRequest
-from app.variant_config.repository import (
-    count_variant_product_option_values,
-    create_variant_product_option_value,
-    list_variant_product_option_values,
-    read_variant_product_option_value_by_id,
-    soft_delete_variant_product_option_value,
-    update_variant_product_option_value,
-)
+from app.variant_config.repository import VariantConfigRepository
 from app.variant_config.schemas import (
     VariantProductOptionValueCreate,
     VariantProductOptionValueRead,
     VariantProductOptionValueUpdate,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -34,19 +27,19 @@ def _to_read(row) -> VariantProductOptionValueRead:
 class VariantConfigService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = VariantConfigRepository(session)
 
     async def create(self, item: VariantConfigCreateRequest) -> Response:
         payload = VariantProductOptionValueCreate(
             variant_id=uuid.UUID(str(item.variant_id)),
             product_option_value_id=uuid.UUID(str(item.variant_option_id)),
         )
-        await create_variant_product_option_value(self._session, payload)
+        await self._repo.create_variant_product_option_value(payload)
         return Response(status_code=201)
 
     async def update(self, id: str, item: VariantConfigUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
-        updated = await update_variant_product_option_value(
-            self._session,
+        updated = await self._repo.update_variant_product_option_value(
             parsed_id,
             VariantProductOptionValueUpdate.model_validate(item.model_dump(exclude_unset=True)),
         )
@@ -56,7 +49,7 @@ class VariantConfigService:
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_id(id)
-        deleted = await soft_delete_variant_product_option_value(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_variant_product_option_value(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="VariantConfig not found")
         return Response(status_code=204)
@@ -66,8 +59,8 @@ class VariantConfigService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_variant_product_option_values(self._session)
-        rows = await list_variant_product_option_values(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_variant_product_option_values()
+        rows = await self._repo.list_variant_product_option_values(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[VariantProductOptionValueRead](
@@ -84,7 +77,7 @@ class VariantConfigService:
 
     async def read_by_id(self, id: str) -> BaseResponse[VariantProductOptionValueRead]:
         parsed_id = _parse_id(id)
-        row = await read_variant_product_option_value_by_id(self._session, parsed_id)
+        row = await self._repo.read_variant_product_option_value_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="VariantConfig not found")
         return BaseResponse[VariantProductOptionValueRead](

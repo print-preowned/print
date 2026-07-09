@@ -16,15 +16,11 @@ from app.password_reset_token.model import (
     PasswordResetValidateResponse,
 )
 from app.password_reset_token.query import hash_token
-from app.password_reset_token.repository import (
-    create_password_reset_token,
-    mark_password_reset_token_used,
-    read_password_reset_token_by_hash,
-)
+from app.password_reset_token.repository import PasswordResetTokenRepository
 from app.password_reset_token.schemas import PasswordResetTokenCreate
 from app.platform_privilege_set_privilege.query import read_by_privilege_set_id_query
 from app.platform_user.query import read_by_user_id_query as read_platform_user_by_user_id_query
-from app.user.repository import read_user_by_email, read_user_by_id, update_user
+from app.user.repository import UserRepository
 from app.user.schemas import UserUpdate
 from app.utility.authorization import TokenPayload
 from app.utility.service_deps import readable_service, writable_service
@@ -43,9 +39,11 @@ def _parse_user_id(user_id: str) -> uuid.UUID:
 class PasswordResetTokenService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = PasswordResetTokenRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def request_password_reset(self, request: PasswordResetRequest) -> dict:
-        row = await read_user_by_email(self._session, request.email)
+        row = await self._user_repo.read_user_by_email(request.email)
         if not row:
             return {
                 "message": "If an account with that email exists, a password reset link has been sent."
@@ -55,8 +53,7 @@ class PasswordResetTokenService:
         token_hash = hash_token(raw_token)
         expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
 
-        await create_password_reset_token(
-            self._session,
+        await self._repo.create_password_reset_token(
             PasswordResetTokenCreate(
                 user_id=row.id,
                 token_hash=token_hash,
@@ -72,7 +69,7 @@ class PasswordResetTokenService:
 
     async def validate_reset_token(self, token: str) -> PasswordResetValidateResponse:
         token_hash = hash_token(token)
-        row = await read_password_reset_token_by_hash(self._session, token_hash)
+        row = await self._repo.read_password_reset_token_by_hash(token_hash)
 
         if not row:
             return PasswordResetValidateResponse(
@@ -97,7 +94,9 @@ class PasswordResetTokenService:
             message="Token is valid",
         )
 
-    async def complete_password_reset(self, complete_request: PasswordResetCompleteRequest) -> Response:
+    async def complete_password_reset(
+        self, complete_request: PasswordResetCompleteRequest
+    ) -> Response:
         validation = await self.validate_reset_token(complete_request.token)
         if not validation.valid:
             raise HTTPException(
@@ -106,22 +105,21 @@ class PasswordResetTokenService:
             )
 
         token_hash = hash_token(complete_request.token)
-        reset_token = await read_password_reset_token_by_hash(self._session, token_hash)
+        reset_token = await self._repo.read_password_reset_token_by_hash(token_hash)
         if not reset_token:
             raise HTTPException(status_code=400, detail="Invalid reset token")
 
         password_hash = PasswordHash.recommended()
         hashed_password = password_hash.hash(complete_request.new_password)
 
-        updated = await update_user(
-            self._session,
+        updated = await self._user_repo.update_user(
             reset_token.user_id,
             UserUpdate(password=hashed_password),
         )
         if updated is None:
             raise HTTPException(status_code=404, detail="User not found")
 
-        marked = await mark_password_reset_token_used(self._session, reset_token.id)
+        marked = await self._repo.mark_password_reset_token_used(reset_token.id)
         if not marked:
             raise HTTPException(status_code=400, detail="Invalid reset token")
 
@@ -135,7 +133,7 @@ class PasswordResetTokenService:
         user_id = token_payload.sub
         parsed_user_id = _parse_user_id(user_id)
 
-        row = await read_user_by_id(self._session, parsed_user_id)
+        row = await self._user_repo.read_user_by_id(parsed_user_id)
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -147,8 +145,7 @@ class PasswordResetTokenService:
         was_new = row.status == "NEW"
         hashed_password = password_hash.hash(change_request.new_password)
 
-        updated = await update_user(
-            self._session,
+        updated = await self._user_repo.update_user(
             parsed_user_id,
             UserUpdate(password=hashed_password),
         )
@@ -156,8 +153,7 @@ class PasswordResetTokenService:
             raise HTTPException(status_code=404, detail="User not found")
 
         if was_new:
-            status_updated = await update_user(
-                self._session,
+            status_updated = await self._user_repo.update_user(
                 parsed_user_id,
                 UserUpdate(status="ACTIVE"),
             )
@@ -172,7 +168,7 @@ class PasswordResetTokenService:
                     str(platform_user.platform_privilege_set_id)
                 )
                 privileges = [mapping.privilege_code for mapping in privilege_mappings]
-                updated_row = await read_user_by_id(self._session, parsed_user_id)
+                updated_row = await self._user_repo.read_user_by_id(parsed_user_id)
                 if updated_row:
                     from app.user.schemas import UserRead
 

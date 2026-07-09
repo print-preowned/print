@@ -8,16 +8,7 @@ from app.platform_privilege_set.model import (
     PlatformPrivilegeSetCreateRequest,
     PlatformPrivilegeSetUpdateRequest,
 )
-from app.platform_privilege_set.repository import (
-    create_platform_privilege_set,
-    list_platform_privilege_sets,
-    read_platform_privilege_set_by_id,
-    read_platform_privilege_set_by_name,
-    read_platform_privilege_sets_by_ids,
-    soft_delete_platform_privilege_set,
-    update_platform_privilege_set,
-    count_platform_privilege_sets,
-)
+from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
 from app.platform_privilege_set.schemas import (
     PlatformPrivilegeSetCreate,
     PlatformPrivilegeSetRead,
@@ -43,7 +34,7 @@ def _to_read(row) -> PlatformPrivilegeSetRead:
 async def create_query(platform_privilege_set: PlatformPrivilegeSetCreateRequest) -> None:
     payload = PlatformPrivilegeSetCreate.model_validate(platform_privilege_set.model_dump())
     async with get_sessionmaker()() as session:
-        await create_platform_privilege_set(session, payload)
+        await PlatformPrivilegeSetRepository(session).create_platform_privilege_set(payload)
         await session.commit()
 
 
@@ -53,8 +44,7 @@ async def update_query(
 ) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_platform_privilege_set(
-            session,
+        updated = await PlatformPrivilegeSetRepository(session).update_platform_privilege_set(
             parsed_id,
             PlatformPrivilegeSetUpdate.model_validate(
                 platform_privilege_set.model_dump(exclude_unset=True)
@@ -69,7 +59,9 @@ async def update_query(
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_platform_privilege_set(session, parsed_id)
+        deleted = await PlatformPrivilegeSetRepository(session).soft_delete_platform_privilege_set(
+            parsed_id
+        )
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -86,9 +78,10 @@ async def read_query(
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_platform_privilege_sets(session, exclude_names=exclude_names)
-        rows = await list_platform_privilege_sets(
-            session,
+        total_results = await PlatformPrivilegeSetRepository(session).count_platform_privilege_sets(
+            exclude_names=exclude_names
+        )
+        rows = await PlatformPrivilegeSetRepository(session).list_platform_privilege_sets(
             offset=offset,
             limit=size,
             exclude_names=exclude_names,
@@ -109,7 +102,9 @@ async def read_query(
 async def read_by_id_query(id: str) -> PlatformPrivilegeSetRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_platform_privilege_set_by_id(session, parsed_id)
+        row = await PlatformPrivilegeSetRepository(session).read_platform_privilege_set_by_id(
+            parsed_id
+        )
     return _to_read(row) if row else None
 
 
@@ -118,11 +113,15 @@ async def read_by_ids_query(ids: list[str]) -> list[PlatformPrivilegeSetRead]:
         return []
     parsed_ids = [_parse_id(value) for value in ids]
     async with get_sessionmaker()() as session:
-        rows = await read_platform_privilege_sets_by_ids(session, parsed_ids)
+        rows = await PlatformPrivilegeSetRepository(session).read_platform_privilege_sets_by_ids(
+            parsed_ids
+        )
     return [_to_read(row) for row in rows]
 
 
 async def read_by_name_query(name: str) -> PlatformPrivilegeSetRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_platform_privilege_set_by_name(session, name)
+        row = await PlatformPrivilegeSetRepository(session).read_platform_privilege_set_by_name(
+            name
+        )
     return _to_read(row) if row else None

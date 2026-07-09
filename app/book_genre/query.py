@@ -5,18 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.book_genre.model import BookGenreCreateRequest, BookGenreUpdateRequest
-from app.book_genre.repository import (
-    count_book_genres,
-    create_book_genre,
-    list_book_genres,
-    read_book_genre_by_id,
-    read_by_book_id,
-    read_by_book_ids,
-    read_by_genre_id,
-    soft_delete_book_genre,
-    soft_delete_by_book_and_genre,
-    update_book_genre,
-)
+from app.book_genre.repository import BookGenreRepository
 from app.book_genre.schemas import BookGenreCreate, BookGenreRead, BookGenreUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -41,7 +30,7 @@ async def create_query(mapping: BookGenreCreateRequest) -> None:
         genre_id=_parse_id(mapping.genre_id),
     )
     async with get_sessionmaker()() as session:
-        await create_book_genre(session, payload)
+        await BookGenreRepository(session).create_book_genre(payload)
         await session.commit()
 
 
@@ -54,8 +43,7 @@ async def update_query(id: str, mapping: BookGenreUpdateRequest) -> UpdateResult
         update_data["genre_id"] = _parse_id(update_data["genre_id"])
 
     async with get_sessionmaker()() as session:
-        updated = await update_book_genre(
-            session,
+        updated = await BookGenreRepository(session).update_book_genre(
             parsed_id,
             BookGenreUpdate.model_validate(update_data),
         )
@@ -68,7 +56,7 @@ async def update_query(id: str, mapping: BookGenreUpdateRequest) -> UpdateResult
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_book_genre(session, parsed_id)
+        deleted = await BookGenreRepository(session).soft_delete_book_genre(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -77,8 +65,7 @@ async def delete_query(id: str) -> UpdateResult:
 
 async def delete_by_book_and_genre_query(book_id: str, genre_id: str) -> UpdateResult:
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_by_book_and_genre(
-            session,
+        deleted = await BookGenreRepository(session).soft_delete_by_book_and_genre(
             _parse_id(book_id),
             _parse_id(genre_id),
         )
@@ -94,8 +81,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[BookGenreRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_book_genres(session)
-        rows = await list_book_genres(session, offset=offset, limit=size)
+        total_results = await BookGenreRepository(session).count_book_genres()
+        rows = await BookGenreRepository(session).list_book_genres(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -112,7 +99,7 @@ async def read_query(params: ParamRequest) -> PaginatedData[BookGenreRead]:
 async def read_by_id_query(id: str) -> BookGenreRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_book_genre_by_id(session, parsed_id)
+        row = await BookGenreRepository(session).read_book_genre_by_id(parsed_id)
     if row is None:
         return None
     return _to_read(row)
@@ -120,7 +107,7 @@ async def read_by_id_query(id: str) -> BookGenreRead | None:
 
 async def read_by_book_id_query(book_id: str) -> list[BookGenreRead]:
     async with get_sessionmaker()() as session:
-        rows = await read_by_book_id(session, _parse_id(book_id))
+        rows = await BookRatingRepository(session).read_by_book_id(_parse_id(book_id))
     return [_to_read(row) for row in rows]
 
 
@@ -129,11 +116,11 @@ async def read_by_book_ids_query(book_ids: list[str]) -> list[BookGenreRead]:
         return []
     parsed_ids = [_parse_id(book_id) for book_id in book_ids]
     async with get_sessionmaker()() as session:
-        rows = await read_by_book_ids(session, parsed_ids)
+        rows = await BookGenreRepository(session).read_by_book_ids(parsed_ids)
     return [_to_read(row) for row in rows]
 
 
 async def read_by_genre_id_query(genre_id: str) -> list[BookGenreRead]:
     async with get_sessionmaker()() as session:
-        rows = await read_by_genre_id(session, _parse_id(genre_id))
+        rows = await BookGenreRepository(session).read_by_genre_id(_parse_id(genre_id))
     return [_to_read(row) for row in rows]

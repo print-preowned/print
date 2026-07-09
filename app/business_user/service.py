@@ -7,17 +7,9 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
-from app.business_user.repository import (
-    count_business_users,
-    create_business_user,
-    list_business_users,
-    read_business_user_by_id,
-    read_business_users_by_business_id,
-    soft_delete_business_user,
-    update_business_user,
-)
+from app.business_user.repository import BusinessUserRepository
 from app.business_user.schemas import BusinessUserCreate, BusinessUserRead, BusinessUserUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -50,21 +42,22 @@ def _to_read(row) -> BusinessUserRead:
 class BusinessUserService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = BusinessUserRepository(session)
 
     async def create(self, mapping: BusinessUserCreateRequest) -> Response:
-        await create_business_user(self._session, _to_create(mapping))
+        await self._repo.create_business_user(_to_create(mapping))
         return Response(status_code=201)
 
     async def update(self, id: str, mapping: BusinessUserUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
-        updated = await update_business_user(self._session, parsed_id, _to_update(mapping))
+        updated = await self._repo.update_business_user(parsed_id, _to_update(mapping))
         if updated is None:
             raise HTTPException(status_code=404, detail="Mapping not found")
         return Response(status_code=200)
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_id(id)
-        deleted = await soft_delete_business_user(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_business_user(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Mapping not found")
         return Response(status_code=204)
@@ -74,8 +67,8 @@ class BusinessUserService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_business_users(self._session)
-        rows = await list_business_users(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_business_users()
+        rows = await self._repo.list_business_users(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[BusinessUserRead](
@@ -92,14 +85,16 @@ class BusinessUserService:
 
     async def read_by_id(self, id: str) -> BaseResponse[BusinessUserRead]:
         parsed_id = _parse_id(id)
-        row = await read_business_user_by_id(self._session, parsed_id)
+        row = await self._repo.read_business_user_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Mapping not found")
-        return BaseResponse[BusinessUserRead](status_code=200, message="Successful", data=_to_read(row))
+        return BaseResponse[BusinessUserRead](
+            status_code=200, message="Successful", data=_to_read(row)
+        )
 
     async def read_by_business_id(self, business_id: str) -> BaseResponse[list[BusinessUserRead]]:
         parsed_business_id = _parse_id(business_id)
-        rows = await read_business_users_by_business_id(self._session, parsed_business_id)
+        rows = await self._repo.read_business_users_by_business_id(parsed_business_id)
         return BaseResponse[list[BusinessUserRead]](
             status_code=200,
             message="Successful",

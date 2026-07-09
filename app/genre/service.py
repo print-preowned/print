@@ -8,10 +8,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.genre.orm import GenreOrm
+from app.genre.repository import GenreRepository
 from app.genre.schemas import GenreCreate, GenreRead, GenreUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
-
-from . import repository
 
 
 def _parse_genre_id(genre_id: str) -> uuid.UUID:
@@ -28,24 +27,25 @@ def _to_read(row: GenreOrm) -> GenreRead:
 class GenreService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = GenreRepository(session)
 
     async def create(self, payload: GenreCreate) -> Response:
         try:
-            await repository.create_genre(self._session, payload)
+            await self._repo.create_genre(payload)
         except IntegrityError as exc:
             raise HTTPException(status_code=409, detail="Genre name already exists") from exc
         return Response(status_code=201)
 
     async def update(self, genre_id: str, payload: GenreUpdate) -> Response:
         parsed_id = _parse_genre_id(genre_id)
-        updated = await repository.update_genre(self._session, parsed_id, payload)
+        updated = await self._repo.update_genre(parsed_id, payload)
         if updated is None:
             raise HTTPException(status_code=404, detail="Genre not found")
         return Response(status_code=200)
 
     async def delete(self, genre_id: str) -> Response:
         parsed_id = _parse_genre_id(genre_id)
-        deleted = await repository.soft_delete_genre(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_genre(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Genre not found")
         return Response(status_code=204)
@@ -55,8 +55,8 @@ class GenreService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await repository.count_genres(self._session)
-        rows = await repository.list_genres(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_genres()
+        rows = await self._repo.list_genres(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[GenreRead](
@@ -73,7 +73,7 @@ class GenreService:
 
     async def read_by_id(self, genre_id: str) -> BaseResponse[GenreRead]:
         parsed_id = _parse_genre_id(genre_id)
-        row = await repository.read_genre_by_id(self._session, parsed_id)
+        row = await self._repo.read_genre_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Genre not found")
         return BaseResponse[GenreRead](status_code=200, message="Successful", data=_to_read(row))

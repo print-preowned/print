@@ -11,21 +11,14 @@ from app.platform_privilege_set.model import (
     PlatformPrivilegeSetCreateRequest,
     PlatformPrivilegeSetUpdateRequest,
 )
-from app.platform_privilege_set.repository import (
-    count_platform_privilege_sets,
-    create_platform_privilege_set,
-    list_platform_privilege_sets,
-    read_platform_privilege_set_by_id,
-    soft_delete_platform_privilege_set,
-    update_platform_privilege_set,
-)
+from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
 from app.platform_privilege_set.schemas import (
     PlatformPrivilegeSetCreate,
     PlatformPrivilegeSetRead,
     PlatformPrivilegeSetUpdate,
 )
 from app.platform_user.guards import SUPER_ADMIN_SET_NAME
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -44,10 +37,10 @@ def _to_response(row: PlatformPrivilegeSetRead) -> PlatformPrivilegeSet:
 class PlatformPrivilegeSetService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = PlatformPrivilegeSetRepository(session)
 
     async def create(self, platform_privilege_set: PlatformPrivilegeSetCreateRequest) -> Response:
-        await create_platform_privilege_set(
-            self._session,
+        await self._repo.create_platform_privilege_set(
             PlatformPrivilegeSetCreate.model_validate(platform_privilege_set.model_dump()),
         )
         return Response(status_code=201)
@@ -57,8 +50,7 @@ class PlatformPrivilegeSetService:
         id: str,
         platform_privilege_set: PlatformPrivilegeSetUpdateRequest,
     ) -> Response:
-        updated = await update_platform_privilege_set(
-            self._session,
+        updated = await self._repo.update_platform_privilege_set(
             _parse_id(id),
             PlatformPrivilegeSetUpdate.model_validate(
                 platform_privilege_set.model_dump(exclude_unset=True)
@@ -69,7 +61,7 @@ class PlatformPrivilegeSetService:
         return Response(status_code=200)
 
     async def delete(self, id: str) -> Response:
-        deleted = await soft_delete_platform_privilege_set(self._session, _parse_id(id))
+        deleted = await self._repo.soft_delete_platform_privilege_set(_parse_id(id))
         if not deleted:
             raise HTTPException(status_code=404, detail="Platform privilege set not found")
         return Response(status_code=204)
@@ -80,12 +72,10 @@ class PlatformPrivilegeSetService:
         offset = (page - 1) * size
         exclude_names = [SUPER_ADMIN_SET_NAME]
 
-        total_results = await count_platform_privilege_sets(
-            self._session,
+        total_results = await self._repo.count_platform_privilege_sets(
             exclude_names=exclude_names,
         )
-        rows = await list_platform_privilege_sets(
-            self._session,
+        rows = await self._repo.list_platform_privilege_sets(
             offset=offset,
             limit=size,
             exclude_names=exclude_names,
@@ -105,7 +95,7 @@ class PlatformPrivilegeSetService:
         )
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformPrivilegeSet]:
-        row = await read_platform_privilege_set_by_id(self._session, _parse_id(id))
+        row = await self._repo.read_platform_privilege_set_by_id(_parse_id(id))
         if row is None:
             raise HTTPException(status_code=404, detail="Platform privilege set not found")
         return BaseResponse[PlatformPrivilegeSet](

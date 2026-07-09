@@ -21,5 +21,5 @@ async def read_by_ids_query(ids: list[str]) -> list[GenreRead]:
         return []
 
     async with get_sessionmaker()() as session:
-        rows = await repository.read_genres_by_ids(session, genre_ids)
+        rows = await repository.GenreRepository(session).read_genres_by_ids(genre_ids)
     return [GenreRead.model_validate(row) for row in rows]

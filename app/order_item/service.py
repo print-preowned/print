@@ -8,14 +8,7 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.order_item.model import OrderItemCreateRequest, OrderItemUpdateRequest
-from app.order_item.repository import (
-    count_order_items,
-    create_order_item,
-    list_order_items,
-    read_order_item_by_id,
-    soft_delete_order_item,
-    update_order_item,
-)
+from app.order_item.repository import OrderItemRepository
 from app.order_item.schemas import OrderItemCreate, OrderItemRead, OrderItemUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
@@ -41,9 +34,10 @@ def _to_create(payload: OrderItemCreateRequest) -> OrderItemCreate:
 class OrderItemService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = OrderItemRepository(session)
 
     async def create(self, item: OrderItemCreateRequest) -> Response:
-        await create_order_item(self._session, _to_create(item))
+        await self._repo.create_order_item(_to_create(item))
         return Response(status_code=201)
 
     async def update(self, id: str, item: OrderItemUpdateRequest) -> Response:
@@ -58,8 +52,7 @@ class OrderItemService:
         if "discount_applied" in update_data and update_data["discount_applied"] is not None:
             update_data["discount_applied"] = Decimal(str(update_data["discount_applied"]))
 
-        updated = await update_order_item(
-            self._session,
+        updated = await self._repo.update_order_item(
             parsed_id,
             OrderItemUpdate.model_validate(update_data),
         )
@@ -69,7 +62,7 @@ class OrderItemService:
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_id(id)
-        deleted = await soft_delete_order_item(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_order_item(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="OrderItem not found")
         return Response(status_code=204)
@@ -79,8 +72,8 @@ class OrderItemService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_order_items(self._session)
-        rows = await list_order_items(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_order_items()
+        rows = await self._repo.list_order_items(offset=offset, limit=size)
         data = [_to_read(row) for row in rows]
 
         total_pages = math.ceil(total_results / size) if size else 1
@@ -98,10 +91,12 @@ class OrderItemService:
 
     async def read_by_id(self, id: str) -> BaseResponse[OrderItemRead]:
         parsed_id = _parse_id(id)
-        row = await read_order_item_by_id(self._session, parsed_id)
+        row = await self._repo.read_order_item_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="OrderItem not found")
-        return BaseResponse[OrderItemRead](status_code=200, message="Successful", data=_to_read(row))
+        return BaseResponse[OrderItemRead](
+            status_code=200, message="Successful", data=_to_read(row)
+        )
 
 
 from app.utility.service_deps import readable_service, writable_service

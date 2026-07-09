@@ -5,11 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.password_reset_token.repository import (
-    create_password_reset_token,
-    mark_password_reset_token_used,
-    read_password_reset_token_by_hash,
-)
+from app.password_reset_token.repository import PasswordResetTokenRepository
 from app.password_reset_token.schemas import PasswordResetTokenCreate, PasswordResetTokenRead
 from app.utility.postgres import get_sessionmaker
 
@@ -37,8 +33,7 @@ async def create_query(
     expires_at: datetime,
 ) -> str:
     async with get_sessionmaker()() as session:
-        created = await create_password_reset_token(
-            session,
+        created = await PasswordResetTokenRepository(session).create_password_reset_token(
             PasswordResetTokenCreate(
                 user_id=_parse_id(user_id),
                 token_hash=token_hash,
@@ -51,14 +46,18 @@ async def create_query(
 
 async def read_by_token_hash_query(token_hash: str) -> PasswordResetTokenRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_password_reset_token_by_hash(session, token_hash)
+        row = await PasswordResetTokenRepository(session).read_password_reset_token_by_hash(
+            token_hash
+        )
     return _to_read(row) if row else None
 
 
 async def mark_as_used_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        marked = await mark_password_reset_token_used(session, parsed_id)
+        marked = await PasswordResetTokenRepository(session).mark_password_reset_token_used(
+            parsed_id
+        )
         if not marked:
             return UpdateResult(matched_count=0)
         await session.commit()

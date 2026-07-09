@@ -4,10 +4,10 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_book.query import read_by_id_query as read_business_book_by_id_query
-from app.variant.model import VariantCreateRequest, VariantUpdateRequest
-from app.variant.schemas import PublicCatalogVariantRead, VariantRead, VariantWithConfigRead
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
+from app.variant.model import VariantCreateRequest, VariantUpdateRequest
+from app.variant.schemas import PublicCatalogVariantRead, VariantRead, VariantWithConfigRead
 
 from .query import (
     create_query,
@@ -25,6 +25,7 @@ from .query import (
 class VariantService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = VariantRepository(session)
 
     async def _assert_business_book_owned(self, business_book_id: str, business_id: str):
         bb = await read_business_book_by_id_query(business_book_id)
@@ -45,9 +46,7 @@ class VariantService:
         if variant is None:
             raise HTTPException(status_code=404, detail="Variant not found")
         if str(variant.business_book_id) != business_book_id:
-            raise HTTPException(
-                status_code=403, detail="Variant does not belong to this listing"
-            )
+            raise HTTPException(status_code=403, detail="Variant does not belong to this listing")
         return variant
 
     async def create(
@@ -123,9 +122,7 @@ class VariantService:
         item = await read_by_id_with_config_query(id)
         if item is None:
             raise HTTPException(status_code=404, detail="Variant not found")
-        return BaseResponse[VariantWithConfigRead](
-            status_code=200, message="Successful", data=item
-        )
+        return BaseResponse[VariantWithConfigRead](status_code=200, message="Successful", data=item)
 
     async def read_public_catalog(
         self,

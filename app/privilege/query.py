@@ -5,17 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
-from app.privilege.repository import (
-    count_privileges,
-    create_privilege,
-    list_privileges,
-    read_privilege_by_code,
-    read_privilege_by_id,
-    read_privileges_by_module_name,
-    soft_delete_privilege,
-    soft_delete_privilege_by_code,
-    update_privilege,
-)
+from app.privilege.repository import PrivilegeRepository
 from app.privilege.schemas import PrivilegeCreate, PrivilegeRead, PrivilegeUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -42,15 +32,14 @@ def _to_create(payload: PrivilegeCreateRequest) -> PrivilegeCreate:
 
 async def create_query(privilege: PrivilegeCreateRequest) -> None:
     async with get_sessionmaker()() as session:
-        await create_privilege(session, _to_create(privilege))
+        await PrivilegeRepository(session).create_privilege(_to_create(privilege))
         await session.commit()
 
 
 async def update_query(id: str, privilege: PrivilegeUpdateRequest) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_privilege(
-            session,
+        updated = await PrivilegeRepository(session).update_privilege(
             parsed_id,
             PrivilegeUpdate.model_validate(privilege.model_dump(exclude_unset=True)),
         )
@@ -63,7 +52,7 @@ async def update_query(id: str, privilege: PrivilegeUpdateRequest) -> UpdateResu
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_privilege(session, parsed_id)
+        deleted = await PrivilegeRepository(session).soft_delete_privilege(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -72,7 +61,7 @@ async def delete_query(id: str) -> UpdateResult:
 
 async def delete_by_code_query(code: str) -> UpdateResult:
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_privilege_by_code(session, code)
+        deleted = await PrivilegeRepository(session).soft_delete_privilege_by_code(code)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -85,8 +74,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[PrivilegeRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_privileges(session)
-        rows = await list_privileges(session, offset=offset, limit=size)
+        total_results = await PrivilegeRepository(session).count_privileges()
+        rows = await PrivilegeRepository(session).list_privileges(offset=offset, limit=size)
         data = [_to_read(row) for row in rows]
 
     total_pages = math.ceil(total_results / size) if size else 1
@@ -104,17 +93,17 @@ async def read_query(params: ParamRequest) -> PaginatedData[PrivilegeRead]:
 async def read_by_id_query(id: str) -> PrivilegeRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_privilege_by_id(session, parsed_id)
+        row = await PrivilegeRepository(session).read_privilege_by_id(parsed_id)
     return _to_read(row) if row else None
 
 
 async def read_by_code_query(code: str) -> PrivilegeRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_privilege_by_code(session, code)
+        row = await PrivilegeRepository(session).read_privilege_by_code(code)
     return _to_read(row) if row else None
 
 
 async def read_by_module_name_query(module_name: str) -> list[PrivilegeRead]:
     async with get_sessionmaker()() as session:
-        rows = await read_privileges_by_module_name(session, module_name)
+        rows = await PrivilegeRepository(session).read_privileges_by_module_name(module_name)
     return [_to_read(row) for row in rows]

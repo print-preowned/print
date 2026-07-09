@@ -13,22 +13,35 @@ from app.utility.service_deps import writable_service
 
 from ..privilege.query import (
     create_query as privilege_create_query,
+)
+from ..privilege.query import (
     delete_by_code_query as privilege_delete_by_code_query,
+)
+from ..privilege.query import (
     read_by_code_query as privilege_read_by_code_query,
+)
+from ..privilege.query import (
     read_by_module_name_query as privilege_read_by_module_name_query,
+)
+from ..privilege.query import (
     update_query as privilege_update_query,
 )
 from ..role_privilege.query import (
     create_query as role_privilege_create_query,
+)
+from ..role_privilege.query import (
     delete_by_role_and_privilege_query,
-    read_by_privilege_code_query as role_privilege_read_by_privilege_code_query,
     read_by_role_and_privilege_query,
+)
+from ..role_privilege.query import (
+    read_by_privilege_code_query as role_privilege_read_by_privilege_code_query,
 )
 
 
 class ModuleService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = ModuleRepository(session)
 
     async def create_module(self, request: ModuleCreateRequest) -> Response:
         module_name = request.module_name
@@ -57,7 +70,9 @@ class ModuleService:
             existing = await privilege_read_by_code_query(privilege_code)
             if existing:
                 role_id_str = str(owner_role_id)
-                existing_mapping = await read_by_role_and_privilege_query(role_id_str, privilege_code)
+                existing_mapping = await read_by_role_and_privilege_query(
+                    role_id_str, privilege_code
+                )
                 if not existing_mapping:
                     mapping = RolePrivilegeCreateRequest(
                         role_id=str(owner_role_id),
@@ -119,7 +134,9 @@ class ModuleService:
                     detail=f"Failed to update privilege: {privilege.code}",
                 )
 
-            existing_mapping = await read_by_role_and_privilege_query(owner_role_id_str, privilege.code)
+            existing_mapping = await read_by_role_and_privilege_query(
+                owner_role_id_str, privilege.code
+            )
             if not existing_mapping:
                 mapping = RolePrivilegeCreateRequest(
                     role_id=str(owner_role_id),

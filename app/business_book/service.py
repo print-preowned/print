@@ -6,33 +6,21 @@ import uuid
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.book.repository import read_book_by_id, read_books_by_ids
+from app.book.repository import BookRepository
 from app.business_book.model import (
-    BusinessBookCreateRequest,
-    BusinessBookUpdateRequest,
-    BusinessBookWithVariantSummary,
-    BusinessBookWithVariants,
     SELLER_LISTING_STATUS_TRANSITIONS,
     SELLER_MUTABLE_LISTING_STATUSES,
+    BusinessBookCreateRequest,
+    BusinessBookUpdateRequest,
+    BusinessBookWithVariants,
+    BusinessBookWithVariantSummary,
 )
-from app.business_book.repository import (
-    count_business_books,
-    create_business_book,
-    list_business_books,
-    read_business_book_by_id,
-    soft_delete_business_book,
-    update_business_book,
-)
+from app.business_book.repository import BusinessBookRepository
 from app.business_book.schemas import BusinessBookCreate, BusinessBookRead, BusinessBookUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 from app.variant.model import VariantWithConfig
-from app.variant.repository import (
-    list_variants,
-    resolve_configs_for_variants,
-    soft_delete_variants_by_business_book,
-    variant_summary_for_business_books,
-)
+from app.variant.repository import VariantRepository
 from app.variant.schemas import VariantRead, VariantWithConfigRead
 
 
@@ -64,9 +52,12 @@ def _to_update(item: BusinessBookUpdateRequest) -> BusinessBookUpdate:
 class BusinessBookService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = BusinessBookRepository(session)
+        self._variant_repo = VariantRepository(session)
+        self._book_repo = BookRepository(session)
 
     async def create(self, item: BusinessBookCreateRequest, business_id: str) -> Response:
-        await create_business_book(self._session, _to_create(item, business_id))
+        await self._repo.create_business_book(_to_create(item, business_id))
         return Response(status_code=201)
 
     async def update(
@@ -75,7 +66,7 @@ class BusinessBookService:
         item: BusinessBookUpdateRequest,
         business_id: str,
     ) -> Response:
-        existing = await read_business_book_by_id(self._session, _parse_id(id))
+        existing = await self._repo.read_business_book_by_id(_parse_id(id))
         if existing is None:
             raise HTTPException(status_code=404, detail="BusinessBook not found")
         if str(existing.business_id) != business_id:
@@ -97,27 +88,28 @@ class BusinessBookService:
         if (
             item.status is not None
             and item.status != existing.status
-            and item.status not in SELLER_LISTING_STATUS_TRANSITIONS.get(existing.status, frozenset())
+            and item.status
+            not in SELLER_LISTING_STATUS_TRANSITIONS.get(existing.status, frozenset())
         ):
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot change listing status from {existing.status} to {item.status}",
             )
 
-        updated = await update_business_book(self._session, _parse_id(id), _to_update(item))
+        updated = await self._repo.update_business_book(_parse_id(id), _to_update(item))
         if updated is None:
             raise HTTPException(status_code=404, detail="BusinessBook not found")
         return Response(status_code=200)
 
     async def delete(self, id: str, business_id: str) -> Response:
-        existing = await read_business_book_by_id(self._session, _parse_id(id))
+        existing = await self._repo.read_business_book_by_id(_parse_id(id))
         if existing is None:
             raise HTTPException(status_code=404, detail="BusinessBook not found")
         if str(existing.business_id) != business_id:
             raise HTTPException(status_code=403, detail="Cannot delete another business's listing")
 
-        await soft_delete_variants_by_business_book(self._session, _parse_id(id))
-        deleted = await soft_delete_business_book(self._session, _parse_id(id))
+        await self._variant_repo.soft_delete_variants_by_business_book(_parse_id(id))
+        deleted = await self._repo.soft_delete_business_book(_parse_id(id))
         if not deleted:
             raise HTTPException(status_code=404, detail="BusinessBook not found")
         return Response(status_code=204)
@@ -127,8 +119,8 @@ class BusinessBookService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_business_books(self._session)
-        rows = await list_business_books(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_business_books()
+        rows = await self._repo.list_business_books(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[BusinessBookRead](
@@ -153,16 +145,15 @@ class BusinessBookService:
         offset = (page - 1) * size
         parsed_business_id = _parse_id(business_id)
 
-        total_results = await count_business_books(self._session, business_id=parsed_business_id)
-        rows = await list_business_books(
-            self._session,
+        total_results = await self._repo.count_business_books(business_id=parsed_business_id)
+        rows = await self._repo.list_business_books(
             offset=offset,
             limit=size,
             business_id=parsed_business_id,
         )
         bb_ids = [row.id for row in rows]
-        summaries = await variant_summary_for_business_books(self._session, bb_ids)
-        books = await read_books_by_ids(self._session, [row.book_id for row in rows])
+        summaries = await self._variant_repo.variant_summary_for_business_books(bb_ids)
+        books = await self._book_repo.read_books_by_ids([row.book_id for row in rows])
         book_by_id = {book.id: book for book in books}
 
         data: list[BusinessBookWithVariantSummary] = []
@@ -199,21 +190,19 @@ class BusinessBookService:
         business_id: str | None = None,
     ) -> BaseResponse[BusinessBookWithVariants]:
         parsed_id = _parse_id(id)
-        row = await read_business_book_by_id(self._session, parsed_id)
+        row = await self._repo.read_business_book_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="BusinessBook not found")
         if business_id and str(row.business_id) != business_id:
             raise HTTPException(status_code=403, detail="Not your business listing")
 
-        book = await read_book_by_id(self._session, row.book_id)
-        variant_rows = await list_variants(
-            self._session,
+        book = await self._book_repo.read_book_by_id(row.book_id)
+        variant_rows = await self._variant_repo.list_variants(
             offset=0,
             limit=100,
             business_book_id=parsed_id,
         )
-        config_map = await resolve_configs_for_variants(
-            self._session,
+        config_map = await self._variant_repo.resolve_configs_for_variants(
             [variant.id for variant in variant_rows],
         )
 

@@ -19,25 +19,15 @@ from app.platform_invite.model import (
     PlatformInviteWithPrivilegeSet,
 )
 from app.platform_invite.query import hash_token
-from app.platform_invite.repository import (
-    count_platform_invites,
-    create_platform_invite,
-    list_platform_invites,
-    mark_expired_invites,
-    read_pending_invite_by_email,
-    read_platform_invite_by_id,
-    read_platform_invite_by_token_hash,
-    resend_pending_invite,
-    update_invite_status,
-)
+from app.platform_invite.repository import PlatformInviteRepository
 from app.platform_invite.schemas import PlatformInviteCreate, PlatformInviteRead
 from app.platform_privilege_set.query import read_by_ids_query as read_privilege_sets_by_ids
 from app.platform_user.guards import ensure_super_admin_not_invitable
 from app.platform_user.model import PlatformUserCreateRequest
+from app.platform_user.query import read_by_user_id_query
 from app.platform_user.service import PlatformUserService
 from app.user.model import SignupRequest
 from app.user.query import read_by_email_query, signup_query
-from app.platform_user.query import read_by_user_id_query
 from app.utility.email import EmailDeliveryError, send_platform_invite_email
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
@@ -81,13 +71,14 @@ def _invite_expires_at() -> datetime:
 class PlatformInviteService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = PlatformInviteRepository(session)
 
     async def _mark_expired(self) -> None:
-        await mark_expired_invites(self._session)
+        await self._repo.mark_expired_invites()
 
     async def _require_pending_invite(self, invite_id: str) -> PlatformInviteRead:
         await self._mark_expired()
-        row = await read_platform_invite_by_id(self._session, _parse_id(invite_id))
+        row = await self._repo.read_platform_invite_by_id(_parse_id(invite_id))
         if row is None:
             raise HTTPException(status_code=404, detail="Platform invite not found")
         invite = _to_read(row)
@@ -97,7 +88,7 @@ class PlatformInviteService:
                 detail=f"Invite is {invite.status.lower()} and cannot be modified",
             )
         if invite.expires_at < datetime.now(timezone.utc):
-            await update_invite_status(self._session, invite.id, "EXPIRED")
+            await self._repo.update_invite_status(invite.id, "EXPIRED")
             raise HTTPException(status_code=409, detail="Invite has expired")
         return invite
 
@@ -120,7 +111,7 @@ class PlatformInviteService:
         await self._mark_expired()
         await self._ensure_email_not_platform_user(invite.email)
 
-        existing_row = await read_pending_invite_by_email(self._session, invite.email)
+        existing_row = await self._repo.read_pending_invite_by_email(invite.email)
         if existing_row:
             raise HTTPException(
                 status_code=409,
@@ -136,8 +127,7 @@ class PlatformInviteService:
             email=invite.email,
             platform_privilege_set_id=uuid.UUID(str(invite.platform_privilege_set_id)),
         )
-        created = await create_platform_invite(
-            self._session,
+        created = await self._repo.create_platform_invite(
             payload=payload,
             token_hash=token_hash,
             invited_by=uuid.UUID(str(invited_by_user_id)),
@@ -147,7 +137,7 @@ class PlatformInviteService:
         try:
             _email_invite(email=invite.email, raw_token=raw_token, expires_at=expires_at)
         except HTTPException:
-            await update_invite_status(self._session, created.id, "REVOKED")
+            await self._repo.update_invite_status(created.id, "REVOKED")
             raise
 
         return {
@@ -170,8 +160,7 @@ class PlatformInviteService:
         expires_at = _invite_expires_at()
         raw_token, token_hash = _new_invite_token()
 
-        updated = await resend_pending_invite(
-            self._session,
+        updated = await self._repo.resend_pending_invite(
             _parse_id(invite_id),
             token_hash=token_hash,
             platform_privilege_set_id=uuid.UUID(str(privilege_set_id)),
@@ -202,14 +191,14 @@ class PlatformInviteService:
 
     async def revoke_invite(self, invite_id: str) -> Response:
         invite = await self._require_pending_invite(invite_id)
-        await update_invite_status(self._session, invite.id, "REVOKED")
+        await self._repo.update_invite_status(invite.id, "REVOKED")
         return Response(status_code=200)
 
     async def validate_invite(self, token: str) -> PlatformInviteValidateResponse:
         await self._mark_expired()
 
         token_hash = hash_token(token)
-        row = await read_platform_invite_by_token_hash(self._session, token_hash)
+        row = await self._repo.read_platform_invite_by_token_hash(token_hash)
 
         if not row:
             return PlatformInviteValidateResponse(
@@ -226,7 +215,7 @@ class PlatformInviteService:
             )
 
         if invite.expires_at < datetime.now(timezone.utc):
-            await update_invite_status(self._session, invite.id, "EXPIRED")
+            await self._repo.update_invite_status(invite.id, "EXPIRED")
             return PlatformInviteValidateResponse(
                 valid=False,
                 message="Invite has expired",
@@ -285,8 +274,7 @@ class PlatformInviteService:
 
         await PlatformUserService(self._session).create(platform_user_data)
 
-        await update_invite_status(
-            self._session,
+        await self._repo.update_invite_status(
             _parse_id(str(invite.id)),
             "ACCEPTED",
             accepted_at=datetime.now(timezone.utc),
@@ -303,7 +291,7 @@ class PlatformInviteService:
             )
 
         invite = validation.invite
-        await update_invite_status(self._session, _parse_id(str(invite.id)), "REJECTED")
+        await self._repo.update_invite_status(_parse_id(str(invite.id)), "REJECTED")
         return Response(status_code=200)
 
     async def read(self, params: ParamRequest) -> PaginatedResponse[PlatformInviteWithPrivilegeSet]:
@@ -311,8 +299,8 @@ class PlatformInviteService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_platform_invites(self._session)
-        rows = await list_platform_invites(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_platform_invites()
+        rows = await self._repo.list_platform_invites(offset=offset, limit=size)
         invites = [_to_read(row) for row in rows]
 
         if not invites:
@@ -329,9 +317,7 @@ class PlatformInviteService:
                 ),
             )
 
-        privilege_set_ids = list(
-            {str(inv.platform_privilege_set_id) for inv in invites}
-        )
+        privilege_set_ids = list({str(inv.platform_privilege_set_id) for inv in invites})
         privilege_set_docs = await read_privilege_sets_by_ids(privilege_set_ids)
         privilege_set_map = {str(ps.id): ps.name for ps in privilege_set_docs}
 
@@ -360,10 +346,12 @@ class PlatformInviteService:
         )
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformInviteRead]:
-        row = await read_platform_invite_by_id(self._session, _parse_id(id))
+        row = await self._repo.read_platform_invite_by_id(_parse_id(id))
         if row is None:
             raise HTTPException(status_code=404, detail="Platform invite not found")
-        return BaseResponse[PlatformInviteRead](status_code=200, message="Successful", data=_to_read(row))
+        return BaseResponse[PlatformInviteRead](
+            status_code=200, message="Successful", data=_to_read(row)
+        )
 
 
 class WritablePlatformInviteService(writable_service(PlatformInviteService)):

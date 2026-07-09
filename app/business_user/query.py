@@ -5,16 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
-from app.business_user.repository import (
-    create_business_user,
-    list_business_users,
-    read_business_user_by_id,
-    read_business_user_by_user_id,
-    read_business_users_by_business_id,
-    soft_delete_business_user,
-    update_business_user,
-    count_business_users,
-)
+from app.business_user.repository import BusinessUserRepository
 from app.business_user.schemas import BusinessUserCreate, BusinessUserRead, BusinessUserUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -51,14 +42,16 @@ def _to_read(row) -> BusinessUserRead:
 
 async def create_query(mapping: BusinessUserCreateRequest) -> None:
     async with get_sessionmaker()() as session:
-        await create_business_user(session, _to_create(mapping))
+        await BusinessUserRepository(session).create_business_user(_to_create(mapping))
         await session.commit()
 
 
 async def update_query(id: str, mapping: BusinessUserUpdateRequest) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_business_user(session, parsed_id, _to_business_user_update(mapping))
+        updated = await BusinessUserRepository(session).update_business_user(
+            parsed_id, _to_business_user_update(mapping)
+        )
         if updated is None:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -68,7 +61,7 @@ async def update_query(id: str, mapping: BusinessUserUpdateRequest) -> UpdateRes
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_business_user(session, parsed_id)
+        deleted = await BusinessUserRepository(session).soft_delete_business_user(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -81,8 +74,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[BusinessUserRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_business_users(session)
-        rows = await list_business_users(session, offset=offset, limit=size)
+        total_results = await BusinessUserRepository(session).count_business_users()
+        rows = await BusinessUserRepository(session).list_business_users(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -98,17 +91,21 @@ async def read_query(params: ParamRequest) -> PaginatedData[BusinessUserRead]:
 
 async def read_by_id_query(id: str) -> BusinessUserRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_business_user_by_id(session, _parse_id(id))
+        row = await BusinessUserRepository(session).read_business_user_by_id(_parse_id(id))
     return _to_read(row) if row else None
 
 
 async def read_by_business_id_query(business_id: str) -> list[BusinessUserRead]:
     async with get_sessionmaker()() as session:
-        rows = await read_business_users_by_business_id(session, _parse_id(business_id))
+        rows = await BusinessUserRepository(session).read_business_users_by_business_id(
+            _parse_id(business_id)
+        )
     return [_to_read(row) for row in rows]
 
 
 async def read_one_by_user_id_query(user_id: str) -> BusinessUserRead | None:
     async with get_sessionmaker()() as session:
-        row = await read_business_user_by_user_id(session, uuid.UUID(user_id))
+        row = await BusinessUserRepository(session).read_business_user_by_user_id(
+            uuid.UUID(user_id)
+        )
     return _to_read(row) if row else None

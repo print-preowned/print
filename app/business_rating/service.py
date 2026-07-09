@@ -7,16 +7,12 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_rating.model import BusinessRatingCreateRequest, BusinessRatingUpdateRequest
-from app.business_rating.repository import (
-    count_business_ratings,
-    create_business_rating,
-    list_business_ratings,
-    read_business_rating_by_id,
-    read_by_business_id,
-    soft_delete_business_rating,
-    update_business_rating,
+from app.business_rating.repository import BusinessRatingRepository
+from app.business_rating.schemas import (
+    BusinessRatingCreate,
+    BusinessRatingRead,
+    BusinessRatingUpdate,
 )
-from app.business_rating.schemas import BusinessRatingCreate, BusinessRatingRead, BusinessRatingUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 
 
@@ -40,9 +36,10 @@ def _to_create(payload: BusinessRatingCreateRequest) -> BusinessRatingCreate:
 class BusinessRatingService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = BusinessRatingRepository(session)
 
     async def create(self, rating: BusinessRatingCreateRequest) -> Response:
-        await create_business_rating(self._session, _to_create(rating))
+        await self._repo.create_business_rating(_to_create(rating))
         return Response(status_code=201)
 
     async def update(self, id: str, rating: BusinessRatingUpdateRequest) -> Response:
@@ -55,8 +52,7 @@ class BusinessRatingService:
         if "order_item_id" in update_data and update_data["order_item_id"] is not None:
             update_data["order_item_id"] = _parse_id(str(update_data["order_item_id"]))
 
-        updated = await update_business_rating(
-            self._session,
+        updated = await self._repo.update_business_rating(
             parsed_id,
             BusinessRatingUpdate.model_validate(update_data),
         )
@@ -66,7 +62,7 @@ class BusinessRatingService:
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_id(id)
-        deleted = await soft_delete_business_rating(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_business_rating(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Rating not found")
         return Response(status_code=204)
@@ -76,8 +72,8 @@ class BusinessRatingService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_business_ratings(self._session)
-        rows = await list_business_ratings(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_business_ratings()
+        rows = await self._repo.list_business_ratings(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[BusinessRatingRead](
@@ -94,13 +90,15 @@ class BusinessRatingService:
 
     async def read_by_id(self, id: str) -> BaseResponse[BusinessRatingRead]:
         parsed_id = _parse_id(id)
-        row = await read_business_rating_by_id(self._session, parsed_id)
+        row = await self._repo.read_business_rating_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Rating not found")
-        return BaseResponse[BusinessRatingRead](status_code=200, message="Successful", data=_to_read(row))
+        return BaseResponse[BusinessRatingRead](
+            status_code=200, message="Successful", data=_to_read(row)
+        )
 
     async def read_by_business_id(self, business_id: str) -> BaseResponse[list[BusinessRatingRead]]:
-        rows = await read_by_business_id(self._session, _parse_id(business_id))
+        rows = await self._repo.read_by_business_id(_parse_id(business_id))
         return BaseResponse[list[BusinessRatingRead]](
             status_code=200,
             message="Successful",

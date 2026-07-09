@@ -5,15 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
-from app.author.repository import (
-    count_authors,
-    create_author,
-    list_authors,
-    read_author_by_id,
-    read_authors_by_ids,
-    soft_delete_author,
-    update_author,
-)
+from app.author.repository import AuthorRepository
 from app.author.schemas import AuthorCreate, AuthorRead, AuthorUpdate
 from app.utility.model import PaginatedData, Pagination, ParamRequest
 from app.utility.postgres import get_sessionmaker
@@ -40,7 +32,7 @@ def _to_create(payload: AuthorCreateRequest) -> AuthorCreate:
 
 async def create_query(author: AuthorCreateRequest) -> str:
     async with get_sessionmaker()() as session:
-        created = await create_author(session, _to_create(author))
+        created = await AuthorRepository(session).create_author(_to_create(author))
         await session.commit()
         return str(created.id)
 
@@ -48,8 +40,7 @@ async def create_query(author: AuthorCreateRequest) -> str:
 async def update_query(id: str, author: AuthorUpdateRequest) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_author(
-            session,
+        updated = await AuthorRepository(session).update_author(
             parsed_id,
             AuthorUpdate.model_validate(author.model_dump(exclude_unset=True)),
         )
@@ -62,7 +53,7 @@ async def update_query(id: str, author: AuthorUpdateRequest) -> UpdateResult:
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_author(session, parsed_id)
+        deleted = await AuthorRepository(session).soft_delete_author(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -75,8 +66,8 @@ async def read_query(params: ParamRequest) -> PaginatedData[AuthorRead]:
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_authors(session)
-        rows = await list_authors(session, offset=offset, limit=size)
+        total_results = await AuthorRepository(session).count_authors()
+        rows = await AuthorRepository(session).list_authors(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -93,7 +84,7 @@ async def read_query(params: ParamRequest) -> PaginatedData[AuthorRead]:
 async def read_by_id_query(id: str) -> AuthorRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_author_by_id(session, parsed_id)
+        row = await AuthorRepository(session).read_author_by_id(parsed_id)
     if row is None:
         return None
     return _to_read(row)
@@ -104,5 +95,5 @@ async def read_by_ids_query(ids: list[str]) -> list[AuthorRead]:
         return []
     parsed_ids = [_parse_id(value) for value in ids]
     async with get_sessionmaker()() as session:
-        rows = await read_authors_by_ids(session, parsed_ids)
+        rows = await AuthorRepository(session).read_authors_by_ids(parsed_ids)
     return [_to_read(row) for row in rows]

@@ -11,21 +11,13 @@ from app.platform_privilege.model import (
     PlatformPrivilegeCreateRequest,
     PlatformPrivilegeUpdateRequest,
 )
-from app.platform_privilege.repository import (
-    count_platform_privileges,
-    create_platform_privilege,
-    list_platform_privileges,
-    read_platform_privilege_by_code,
-    read_platform_privilege_by_id,
-    soft_delete_platform_privilege,
-    update_platform_privilege,
-)
+from app.platform_privilege.repository import PlatformPrivilegeRepository
 from app.platform_privilege.schemas import (
     PlatformPrivilegeCreate,
     PlatformPrivilegeRead,
     PlatformPrivilegeUpdate,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -44,41 +36,42 @@ def _to_response(row: PlatformPrivilegeRead) -> PlatformPrivilege:
 class PlatformPrivilegeService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = PlatformPrivilegeRepository(session)
 
     async def create(self, platform_privilege: PlatformPrivilegeCreateRequest) -> Response:
-        existing = await read_platform_privilege_by_code(self._session, platform_privilege.code)
+        existing = await self._repo.read_platform_privilege_by_code(platform_privilege.code)
         if existing:
             raise HTTPException(
                 status_code=409,
                 detail=f"Platform privilege with code '{platform_privilege.code}' already exists",
             )
 
-        await create_platform_privilege(
-            self._session,
+        await self._repo.create_platform_privilege(
             PlatformPrivilegeCreate.model_validate(platform_privilege.model_dump()),
         )
         return Response(status_code=201)
 
     async def update(self, id: str, platform_privilege: PlatformPrivilegeUpdateRequest) -> Response:
         if platform_privilege.code:
-            existing = await read_platform_privilege_by_code(self._session, platform_privilege.code)
+            existing = await self._repo.read_platform_privilege_by_code(platform_privilege.code)
             if existing and str(existing.id) != id:
                 raise HTTPException(
                     status_code=409,
                     detail=f"Platform privilege with code '{platform_privilege.code}' already exists",
                 )
 
-        updated = await update_platform_privilege(
-            self._session,
+        updated = await self._repo.update_platform_privilege(
             _parse_id(id),
-            PlatformPrivilegeUpdate.model_validate(platform_privilege.model_dump(exclude_unset=True)),
+            PlatformPrivilegeUpdate.model_validate(
+                platform_privilege.model_dump(exclude_unset=True)
+            ),
         )
         if updated is None:
             raise HTTPException(status_code=404, detail="Platform privilege not found")
         return Response(status_code=200)
 
     async def delete(self, id: str) -> Response:
-        deleted = await soft_delete_platform_privilege(self._session, _parse_id(id))
+        deleted = await self._repo.soft_delete_platform_privilege(_parse_id(id))
         if not deleted:
             raise HTTPException(status_code=404, detail="Platform privilege not found")
         return Response(status_code=204)
@@ -88,8 +81,8 @@ class PlatformPrivilegeService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_platform_privileges(self._session)
-        rows = await list_platform_privileges(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_platform_privileges()
+        rows = await self._repo.list_platform_privileges(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[PlatformPrivilege](
@@ -105,7 +98,7 @@ class PlatformPrivilegeService:
         )
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformPrivilege]:
-        row = await read_platform_privilege_by_id(self._session, _parse_id(id))
+        row = await self._repo.read_platform_privilege_by_id(_parse_id(id))
         if row is None:
             raise HTTPException(status_code=404, detail="Platform privilege not found")
         return BaseResponse[PlatformPrivilege](
@@ -115,7 +108,7 @@ class PlatformPrivilegeService:
         )
 
     async def read_by_code(self, code: str) -> BaseResponse[PlatformPrivilege | None]:
-        row = await read_platform_privilege_by_code(self._session, code)
+        row = await self._repo.read_platform_privilege_by_code(code)
         return BaseResponse[PlatformPrivilege | None](
             status_code=200,
             message="Successful",

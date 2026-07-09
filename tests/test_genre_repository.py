@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.genre.repository import soft_delete_genre
+from app.genre.repository import GenreRepository
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,7 @@ async def test_soft_delete_genre_returns_true_when_row_updated() -> None:
     session = AsyncMock()
     session.scalar = AsyncMock(return_value=genre_id)
 
-    deleted = await soft_delete_genre(session, genre_id)
+    deleted = await GenreRepository(session).soft_delete_genre(genre_id)
 
     assert deleted is True
     session.scalar.assert_awaited_once()
@@ -28,6 +28,6 @@ async def test_soft_delete_genre_returns_false_when_missing() -> None:
     session = AsyncMock()
     session.scalar = AsyncMock(return_value=None)
 
-    deleted = await soft_delete_genre(session, uuid.uuid4())
+    deleted = await GenreRepository(session).soft_delete_genre(uuid.uuid4())
 
     assert deleted is False

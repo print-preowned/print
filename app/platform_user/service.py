@@ -23,15 +23,7 @@ from app.platform_user.model import (
     PlatformUserUpdateRequest,
     PlatformUserWithUser,
 )
-from app.platform_user.repository import (
-    count_platform_users,
-    create_platform_user,
-    list_platform_users,
-    read_platform_user_by_id,
-    read_platform_user_by_user_id,
-    soft_delete_platform_user,
-    update_platform_user,
-)
+from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.schemas import PlatformUserCreate, PlatformUserRead, PlatformUserUpdate
 from app.user.model import LoginRequest, LoginResponse
 from app.user.query import read_by_ids_query as read_users_by_ids
@@ -66,6 +58,7 @@ def _to_update(payload: PlatformUserUpdateRequest) -> PlatformUserUpdate:
 class PlatformUserService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = PlatformUserRepository(session)
 
     async def signup(self, user: PlatformUserSignupRequest) -> Response:
         user_id = await signup_query(user)
@@ -83,8 +76,7 @@ class PlatformUserService:
         return await UserService(self._session).login(request, user, True)
 
     async def create(self, platform_user: PlatformUserCreateRequest) -> Response:
-        existing = await read_platform_user_by_user_id(
-            self._session,
+        existing = await self._repo.read_platform_user_by_user_id(
             uuid.UUID(str(platform_user.user_id)),
         )
         if existing:
@@ -95,12 +87,12 @@ class PlatformUserService:
 
         await ensure_super_admin_not_invitable(str(platform_user.platform_privilege_set_id))
 
-        await create_platform_user(self._session, _to_create(platform_user))
+        await self._repo.create_platform_user(_to_create(platform_user))
         return Response(status_code=201)
 
     async def update(self, id: str, platform_user: PlatformUserUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
-        existing_row = await read_platform_user_by_id(self._session, parsed_id)
+        existing_row = await self._repo.read_platform_user_by_id(parsed_id)
         if existing_row is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
         existing = _to_read(existing_row)
@@ -110,7 +102,7 @@ class PlatformUserService:
             await ensure_super_admin_not_demoted(existing, new_privilege_set_id)
             await ensure_super_admin_not_assignable_via_update(str(new_privilege_set_id))
 
-        updated = await update_platform_user(self._session, parsed_id, _to_update(platform_user))
+        updated = await self._repo.update_platform_user(parsed_id, _to_update(platform_user))
         if updated is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
         return Response(status_code=200)
@@ -128,7 +120,7 @@ class PlatformUserService:
                 detail="Cannot transfer the super admin role to yourself",
             )
 
-        target = await read_platform_user_by_id(self._session, _parse_id(target_platform_user_id))
+        target = await self._repo.read_platform_user_by_id(_parse_id(target_platform_user_id))
         if target is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
 
@@ -143,16 +135,14 @@ class PlatformUserService:
                 detail="Required privilege sets not found; cannot transfer super admin role",
             )
 
-        caller_updated = await update_platform_user(
-            self._session,
+        caller_updated = await self._repo.update_platform_user(
             caller_platform_user.id,
             PlatformUserUpdate(platform_privilege_set_id=uuid.UUID(admin_set_id)),
         )
         if caller_updated is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
 
-        target_updated = await update_platform_user(
-            self._session,
+        target_updated = await self._repo.update_platform_user(
             _parse_id(target_platform_user_id),
             PlatformUserUpdate(platform_privilege_set_id=uuid.UUID(super_admin_set_id)),
         )
@@ -163,14 +153,14 @@ class PlatformUserService:
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_id(id)
-        existing_row = await read_platform_user_by_id(self._session, parsed_id)
+        existing_row = await self._repo.read_platform_user_by_id(parsed_id)
         if existing_row is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
         existing = _to_read(existing_row)
 
         await ensure_super_admin_not_removed(existing)
 
-        deleted = await soft_delete_platform_user(self._session, parsed_id)
+        deleted = await self._repo.soft_delete_platform_user(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Platform user not found")
         return Response(status_code=204)
@@ -193,15 +183,13 @@ class PlatformUserService:
         return PlatformUserWithUser(
             **platform_user.model_dump(mode="json"),
             user_email=user.email if user else None,
-            user_name=(
-                f"{user.first_name} {user.last_name}".strip() if user else None
-            ),
+            user_name=(f"{user.first_name} {user.last_name}".strip() if user else None),
             platform_privilege_set_name=privilege_set.name if privilege_set else None,
             is_super_admin=is_super_admin,
         )
 
     async def read_me(self, user_id: str) -> BaseResponse[PlatformUserWithUser]:
-        row = await read_platform_user_by_user_id(self._session, _parse_id(user_id))
+        row = await self._repo.read_platform_user_by_user_id(_parse_id(user_id))
         if row is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
         platform_user = _to_read(row)
@@ -216,8 +204,8 @@ class PlatformUserService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_platform_users(self._session)
-        rows = await list_platform_users(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_platform_users()
+        rows = await self._repo.list_platform_users(offset=offset, limit=size)
         platform_users = [_to_read(row) for row in rows]
 
         if not platform_users:
@@ -235,9 +223,7 @@ class PlatformUserService:
             )
 
         user_ids = [str(pu.user_id) for pu in platform_users]
-        privilege_set_ids = list(
-            {str(pu.platform_privilege_set_id) for pu in platform_users}
-        )
+        privilege_set_ids = list({str(pu.platform_privilege_set_id) for pu in platform_users})
         user_docs = await read_users_by_ids(user_ids)
         privilege_set_docs = await read_privilege_sets_by_ids(privilege_set_ids)
         user_map = {}
@@ -247,16 +233,12 @@ class PlatformUserService:
                 "email": u.email or "",
                 "name": f"{u.first_name} {u.last_name}".strip() or "—",
             }
-        privilege_set_map = {
-            str(ps.id): ps.name for ps in privilege_set_docs
-        }
+        privilege_set_map = {str(ps.id): ps.name for ps in privilege_set_docs}
         super_admin_set_id = await get_super_admin_privilege_set_id()
         data = []
         for pu in platform_users:
             info = user_map.get(str(pu.user_id), {"email": "—", "name": "—"})
-            privilege_set_name = privilege_set_map.get(
-                str(pu.platform_privilege_set_id), "—"
-            )
+            privilege_set_name = privilege_set_map.get(str(pu.platform_privilege_set_id), "—")
             is_super_admin = (
                 super_admin_set_id is not None
                 and str(pu.platform_privilege_set_id) == super_admin_set_id
@@ -285,13 +267,15 @@ class PlatformUserService:
         )
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformUserRead]:
-        row = await read_platform_user_by_id(self._session, _parse_id(id))
+        row = await self._repo.read_platform_user_by_id(_parse_id(id))
         if row is None:
             raise HTTPException(status_code=404, detail="Platform user not found")
-        return BaseResponse[PlatformUserRead](status_code=200, message="Successful", data=_to_read(row))
+        return BaseResponse[PlatformUserRead](
+            status_code=200, message="Successful", data=_to_read(row)
+        )
 
     async def read_by_user_id(self, user_id: str) -> BaseResponse[PlatformUserRead | None]:
-        row = await read_platform_user_by_user_id(self._session, _parse_id(user_id))
+        row = await self._repo.read_platform_user_by_user_id(_parse_id(user_id))
         return BaseResponse[PlatformUserRead | None](
             status_code=200,
             message="Successful",

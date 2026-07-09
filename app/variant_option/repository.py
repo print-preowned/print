@@ -10,103 +10,90 @@ from app.variant_option.orm import ProductOptionValueOrm
 from app.variant_option.schemas import ProductOptionValueCreate, ProductOptionValueUpdate
 
 
-async def create_product_option_value(
-    session: AsyncSession,
-    payload: ProductOptionValueCreate,
-) -> ProductOptionValueOrm:
-    row = ProductOptionValueOrm(**payload.model_dump())
-    session.add(row)
-    await session.flush()
-    return row
+class VariantOptionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
+    async def create_product_option_value(
+        self, payload: ProductOptionValueCreate
+    ) -> ProductOptionValueOrm:
+        row = ProductOptionValueOrm(**payload.model_dump())
+        self._session.add(row)
+        await self._session.flush()
+        return row
 
-async def update_product_option_value(
-    session: AsyncSession,
-    product_option_value_id: uuid.UUID,
-    payload: ProductOptionValueUpdate,
-) -> ProductOptionValueOrm | None:
-    row = await read_product_option_value_by_id(session, product_option_value_id)
-    if row is None:
-        return None
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(row, field, value)
-    await session.flush()
-    return row
+    async def update_product_option_value(
+        self, product_option_value_id: uuid.UUID, payload: ProductOptionValueUpdate
+    ) -> ProductOptionValueOrm | None:
+        row = await self.read_product_option_value_by_id(product_option_value_id)
+        if row is None:
+            return None
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(row, field, value)
+        await self._session.flush()
+        return row
 
-
-async def soft_delete_product_option_value(
-    session: AsyncSession,
-    product_option_value_id: uuid.UUID,
-) -> bool:
-    deleted_id = await session.scalar(
-        update(ProductOptionValueOrm)
-        .where(
-            ProductOptionValueOrm.id == product_option_value_id,
-            ProductOptionValueOrm.deleted_at.is_(None),
+    async def soft_delete_product_option_value(self, product_option_value_id: uuid.UUID) -> bool:
+        deleted_id = await self._session.scalar(
+            update(ProductOptionValueOrm)
+            .where(
+                ProductOptionValueOrm.id == product_option_value_id,
+                ProductOptionValueOrm.deleted_at.is_(None),
+            )
+            .values(deleted_at=datetime.now(UTC), status="DELETED")
+            .returning(ProductOptionValueOrm.id)
         )
-        .values(deleted_at=datetime.now(UTC), status="DELETED")
-        .returning(ProductOptionValueOrm.id)
-    )
-    return deleted_id is not None
+        return deleted_id is not None
 
-
-async def read_product_option_value_by_id(
-    session: AsyncSession,
-    product_option_value_id: uuid.UUID,
-) -> ProductOptionValueOrm | None:
-    return await session.scalar(
-        select(ProductOptionValueOrm).where(
-            ProductOptionValueOrm.id == product_option_value_id,
-            ProductOptionValueOrm.deleted_at.is_(None),
+    async def read_product_option_value_by_id(
+        self, product_option_value_id: uuid.UUID
+    ) -> ProductOptionValueOrm | None:
+        return await self._session.scalar(
+            select(ProductOptionValueOrm).where(
+                ProductOptionValueOrm.id == product_option_value_id,
+                ProductOptionValueOrm.deleted_at.is_(None),
+            )
         )
-    )
 
-
-async def read_product_option_value_by_option_and_value(
-    session: AsyncSession,
-    product_option_id: uuid.UUID,
-    value: str,
-) -> ProductOptionValueOrm | None:
-    return await session.scalar(
-        select(ProductOptionValueOrm).where(
-            ProductOptionValueOrm.product_option_id == product_option_id,
-            ProductOptionValueOrm.value == value,
-            ProductOptionValueOrm.deleted_at.is_(None),
+    async def read_product_option_value_by_option_and_value(
+        self, product_option_id: uuid.UUID, value: str
+    ) -> ProductOptionValueOrm | None:
+        return await self._session.scalar(
+            select(ProductOptionValueOrm).where(
+                ProductOptionValueOrm.product_option_id == product_option_id,
+                ProductOptionValueOrm.value == value,
+                ProductOptionValueOrm.deleted_at.is_(None),
+            )
         )
-    )
 
+    async def count_product_option_values(
+        self, *, product_option_id: uuid.UUID | None = None
+    ) -> int:
+        statement = (
+            select(func.count())
+            .select_from(ProductOptionValueOrm)
+            .where(ProductOptionValueOrm.deleted_at.is_(None))
+        )
+        if product_option_id is not None:
+            statement = statement.where(
+                ProductOptionValueOrm.product_option_id == product_option_id
+            )
+        total = await self._session.scalar(statement)
+        return int(total or 0)
 
-async def count_product_option_values(
-    session: AsyncSession,
-    *,
-    product_option_id: uuid.UUID | None = None,
-) -> int:
-    statement = (
-        select(func.count())
-        .select_from(ProductOptionValueOrm)
-        .where(ProductOptionValueOrm.deleted_at.is_(None))
-    )
-    if product_option_id is not None:
-        statement = statement.where(ProductOptionValueOrm.product_option_id == product_option_id)
-    total = await session.scalar(statement)
-    return int(total or 0)
-
-
-async def list_product_option_values(
-    session: AsyncSession,
-    *,
-    offset: int,
-    limit: int,
-    product_option_id: uuid.UUID | None = None,
-) -> list[ProductOptionValueOrm]:
-    statement: Select[tuple[ProductOptionValueOrm]] = (
-        select(ProductOptionValueOrm)
-        .where(ProductOptionValueOrm.deleted_at.is_(None))
-        .order_by(ProductOptionValueOrm.value)
-        .offset(offset)
-        .limit(limit)
-    )
-    if product_option_id is not None:
-        statement = statement.where(ProductOptionValueOrm.product_option_id == product_option_id)
-    result = await session.scalars(statement)
-    return list(result)
+    async def list_product_option_values(
+        self, *, offset: int, limit: int, product_option_id: uuid.UUID | None = None
+    ) -> list[ProductOptionValueOrm]:
+        statement: Select[tuple[ProductOptionValueOrm]] = (
+            select(ProductOptionValueOrm)
+            .where(ProductOptionValueOrm.deleted_at.is_(None))
+            .order_by(ProductOptionValueOrm.value)
+            .offset(offset)
+            .limit(limit)
+        )
+        if product_option_id is not None:
+            statement = statement.where(
+                ProductOptionValueOrm.product_option_id == product_option_id
+            )
+        result = await self._session.scalars(statement)
+        return list(result)

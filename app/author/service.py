@@ -8,16 +8,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
-from app.author.repository import (
-    count_authors,
-    create_author,
-    list_authors,
-    read_author_by_id,
-    soft_delete_author,
-    update_author,
-)
+from app.author.repository import AuthorRepository
 from app.author.schemas import AuthorCreate, AuthorRead, AuthorUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest, Pagination
+from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -38,17 +31,17 @@ def _to_create(payload: AuthorCreateRequest) -> AuthorCreate:
 class AuthorService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._repo = AuthorRepository(session)
 
     async def create(self, author: AuthorCreateRequest) -> Response:
-        created = await create_author(self._session, _to_create(author))
+        created = await self._repo.create_author(_to_create(author))
         return JSONResponse(
             status_code=201,
             content={"id": str(created.id), "message": "Author created"},
         )
 
     async def update(self, id: str, author: AuthorUpdateRequest) -> Response:
-        updated = await update_author(
-            self._session,
+        updated = await self._repo.update_author(
             _parse_id(id),
             AuthorUpdate.model_validate(author.model_dump(exclude_unset=True)),
         )
@@ -57,7 +50,7 @@ class AuthorService:
         return Response(status_code=200)
 
     async def delete(self, id: str) -> Response:
-        deleted = await soft_delete_author(self._session, _parse_id(id))
+        deleted = await self._repo.soft_delete_author(_parse_id(id))
         if not deleted:
             raise HTTPException(status_code=404, detail="Author not found")
         return Response(status_code=204)
@@ -67,8 +60,8 @@ class AuthorService:
         size = params.size
         offset = (page - 1) * size
 
-        total_results = await count_authors(self._session)
-        rows = await list_authors(self._session, offset=offset, limit=size)
+        total_results = await self._repo.count_authors()
+        rows = await self._repo.list_authors(offset=offset, limit=size)
 
         total_pages = math.ceil(total_results / size) if size else 1
         return PaginatedResponse[AuthorRead](
@@ -84,7 +77,7 @@ class AuthorService:
         )
 
     async def read_by_id(self, id: str) -> BaseResponse[AuthorRead]:
-        row = await read_author_by_id(self._session, _parse_id(id))
+        row = await self._repo.read_author_by_id(_parse_id(id))
         if row is None:
             raise HTTPException(status_code=404, detail="Author not found")
         return BaseResponse[AuthorRead](

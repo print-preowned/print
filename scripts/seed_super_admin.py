@@ -13,26 +13,29 @@ Usage:
 """
 
 import asyncio
-import sys
 import os
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.platform_privilege_set.repository import read_platform_privilege_set_by_name
+from pwdlib import PasswordHash
+
+from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
 from app.platform_user.model import PlatformUserCreateRequest
-from app.platform_user.repository import create_platform_user, read_platform_user_by_user_id
+from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.schemas import PlatformUserCreate
 from app.user.model import UserCreateRequest
-from app.user.repository import create_user, read_user_by_email
+from app.user.repository import UserRepository
 from app.user.schemas import UserCreate
 from app.utility.postgres import get_sessionmaker
-from pwdlib import PasswordHash
 
 
 async def find_super_admin_privilege_set_id(session):
     print("Finding Super Admin privilege set...")
-    record = await read_platform_privilege_set_by_name(session, "Super Admin")
+    record = await PlatformPrivilegeSetRepository(session).read_platform_privilege_set_by_name(
+        "Super Admin"
+    )
     if not record:
         raise Exception(
             "Super Admin privilege set not found. "
@@ -42,36 +45,42 @@ async def find_super_admin_privilege_set_id(session):
     return record.id
 
 
-async def create_super_admin_user(email: str, password: str, first_name: str = "Super", last_name: str = "Admin"):
+async def create_super_admin_user(
+    email: str, password: str, first_name: str = "Super", last_name: str = "Admin"
+):
     print(f"\nCreating super admin user: {email}")
 
     async with get_sessionmaker()() as session:
-        existing_user = await read_user_by_email(session, email)
+        existing_user = await UserRepository(session).read_user_by_email(email)
         if existing_user:
             print(f"  - User with email {email} already exists")
-            platform_user = await read_platform_user_by_user_id(session, existing_user.id)
+            platform_user = await PlatformUserRepository(session).read_platform_user_by_user_id(
+                existing_user.id
+            )
             if platform_user:
                 print("  - User already has a platform_user record")
                 return existing_user.id, platform_user.id
 
             print("  - Creating platform_user record for existing user...")
             privilege_set_id = await find_super_admin_privilege_set_id(session)
-            await create_platform_user(
-                session,
+            await PlatformUserRepository(session).create_platform_user(
                 PlatformUserCreate(
                     user_id=existing_user.id,
                     platform_privilege_set_id=privilege_set_id,
                 ),
             )
             await session.commit()
-            platform_user = await read_platform_user_by_user_id(session, existing_user.id)
-            print(f"  ✓ Created platform_user record (ID: {platform_user.id if platform_user else 'None'})")
+            platform_user = await PlatformUserRepository(session).read_platform_user_by_user_id(
+                existing_user.id
+            )
+            print(
+                f"  ✓ Created platform_user record (ID: {platform_user.id if platform_user else 'None'})"
+            )
             return existing_user.id, platform_user.id if platform_user else None
 
         password_hash = PasswordHash.recommended()
         hashed_password = password_hash.hash(password)
-        created_user = await create_user(
-            session,
+        created_user = await UserRepository(session).create_user(
             UserCreate(
                 first_name=first_name,
                 last_name=last_name,
@@ -83,8 +92,7 @@ async def create_super_admin_user(email: str, password: str, first_name: str = "
         print(f"  ✓ Created user (ID: {created_user.id}, status: NEW)")
 
         privilege_set_id = await find_super_admin_privilege_set_id(session)
-        platform_user = await create_platform_user(
-            session,
+        platform_user = await PlatformUserRepository(session).create_platform_user(
             PlatformUserCreate(
                 user_id=created_user.id,
                 platform_privilege_set_id=privilege_set_id,
@@ -107,13 +115,17 @@ async def main():
     if not email:
         print("\n✗ Error: PRINT_SA_EMAIL environment variable is required")
         print("\nUsage:")
-        print("  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py")
+        print(
+            "  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py"
+        )
         sys.exit(1)
 
     if not password:
         print("\n✗ Error: PRINT_SA_PASSWORD environment variable is required")
         print("\nUsage:")
-        print("  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py")
+        print(
+            "  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py"
+        )
         sys.exit(1)
 
     try:

@@ -8,17 +8,7 @@ from app.platform_privilege_set_privilege.model import (
     PlatformPrivilegeSetPrivilegeCreateRequest,
     PlatformPrivilegeSetPrivilegeUpdateRequest,
 )
-from app.platform_privilege_set_privilege.repository import (
-    create_platform_privilege_set_privilege,
-    list_platform_privilege_set_privileges,
-    read_by_privilege_set_and_code,
-    read_by_privilege_set_id,
-    read_platform_privilege_set_privilege_by_id,
-    soft_delete_by_privilege_set_and_code,
-    soft_delete_platform_privilege_set_privilege,
-    update_platform_privilege_set_privilege,
-    count_platform_privilege_set_privileges,
-)
+from app.platform_privilege_set_privilege.repository import PlatformPrivilegeSetPrivilegeRepository
 from app.platform_privilege_set_privilege.schemas import (
     PlatformPrivilegeSetPrivilegeCreate,
     PlatformPrivilegeSetPrivilegeRead,
@@ -46,7 +36,9 @@ async def create_query(mapping: PlatformPrivilegeSetPrivilegeCreateRequest) -> N
     data["privilege_set_id"] = uuid.UUID(str(data["privilege_set_id"]))
     payload = PlatformPrivilegeSetPrivilegeCreate.model_validate(data)
     async with get_sessionmaker()() as session:
-        await create_platform_privilege_set_privilege(session, payload)
+        await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).create_platform_privilege_set_privilege(payload)
         await session.commit()
 
 
@@ -56,8 +48,9 @@ async def update_query(
 ) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        updated = await update_platform_privilege_set_privilege(
-            session,
+        updated = await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).update_platform_privilege_set_privilege(
             parsed_id,
             PlatformPrivilegeSetPrivilegeUpdate.model_validate(
                 mapping.model_dump(exclude_unset=True)
@@ -72,7 +65,9 @@ async def update_query(
 async def delete_query(id: str) -> UpdateResult:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_platform_privilege_set_privilege(session, parsed_id)
+        deleted = await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).soft_delete_platform_privilege_set_privilege(parsed_id)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
@@ -85,8 +80,12 @@ async def read_query(params: ParamRequest) -> PaginatedData[PlatformPrivilegeSet
     offset = (page - 1) * size
 
     async with get_sessionmaker()() as session:
-        total_results = await count_platform_privilege_set_privileges(session)
-        rows = await list_platform_privilege_set_privileges(session, offset=offset, limit=size)
+        total_results = await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).count_platform_privilege_set_privileges()
+        rows = await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).list_platform_privilege_set_privileges(offset=offset, limit=size)
 
     total_pages = math.ceil(total_results / size) if size else 1
     return PaginatedData(
@@ -103,7 +102,9 @@ async def read_query(params: ParamRequest) -> PaginatedData[PlatformPrivilegeSet
 async def read_by_id_query(id: str) -> PlatformPrivilegeSetPrivilegeRead | None:
     parsed_id = _parse_id(id)
     async with get_sessionmaker()() as session:
-        row = await read_platform_privilege_set_privilege_by_id(session, parsed_id)
+        row = await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).read_platform_privilege_set_privilege_by_id(parsed_id)
     return _to_read(row) if row else None
 
 
@@ -112,7 +113,9 @@ async def read_by_privilege_set_id_query(
 ) -> list[PlatformPrivilegeSetPrivilegeRead]:
     parsed_id = _parse_id(privilege_set_id)
     async with get_sessionmaker()() as session:
-        rows = await read_by_privilege_set_id(session, parsed_id)
+        rows = await PlatformPrivilegeSetPrivilegeRepository(session).read_by_privilege_set_id(
+            parsed_id
+        )
     return [_to_read(row) for row in rows]
 
 
@@ -122,7 +125,9 @@ async def read_by_privilege_set_and_privilege_query(
 ) -> PlatformPrivilegeSetPrivilegeRead | None:
     parsed_id = _parse_id(privilege_set_id)
     async with get_sessionmaker()() as session:
-        row = await read_by_privilege_set_and_code(session, parsed_id, privilege_code)
+        row = await PlatformPrivilegeSetPrivilegeRepository(session).read_by_privilege_set_and_code(
+            parsed_id, privilege_code
+        )
     return _to_read(row) if row else None
 
 
@@ -132,7 +137,9 @@ async def delete_by_privilege_set_and_privilege_query(
 ) -> UpdateResult:
     parsed_id = _parse_id(privilege_set_id)
     async with get_sessionmaker()() as session:
-        deleted = await soft_delete_by_privilege_set_and_code(session, parsed_id, privilege_code)
+        deleted = await PlatformPrivilegeSetPrivilegeRepository(
+            session
+        ).soft_delete_by_privilege_set_and_code(parsed_id, privilege_code)
         if not deleted:
             return UpdateResult(matched_count=0)
         await session.commit()
