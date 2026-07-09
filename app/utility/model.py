@@ -1,5 +1,5 @@
-from typing import Any, Generic, List, Optional, TypeVar
 from datetime import datetime, timezone
+from typing import Any, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, field_validator
 

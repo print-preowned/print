@@ -11,6 +11,7 @@ from app.order.model import OrderCreateRequest, OrderUpdateRequest
 from app.order.repository import OrderRepository
 from app.order.schemas import OrderCreate, OrderRead, OrderUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -89,8 +90,6 @@ class OrderService:
             raise HTTPException(status_code=404, detail="Order not found")
         return BaseResponse[OrderRead](status_code=200, message="Successful", data=_to_read(row))
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableOrderService = writable_service(OrderService)
 ReadableOrderService = readable_service(OrderService)

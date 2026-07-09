@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from app.utility.model import BaseAppModel, BaseResponse
+
+from pydantic import BaseModel, ConfigDict
+
+from app.utility.model import BaseAppModel
 
 
 class PlatformPrivilegeSet(BaseAppModel):
@@ -10,8 +12,6 @@ class PlatformPrivilegeSet(BaseAppModel):
     status: str
     created_at: datetime
     updated_at: datetime
-
-
 
 
 class PlatformPrivilegeSetCreateRequest(BaseModel):

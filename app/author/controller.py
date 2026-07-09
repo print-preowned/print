@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Response
 from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
 from app.author.schemas import AuthorRead
 from app.author.service import ReadableAuthorService, WritableAuthorService
-from app.utility.authorization import require_context, require_privilege, TokenPayload
+from app.utility.authorization import TokenPayload, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/author", tags=["AuthorController"])

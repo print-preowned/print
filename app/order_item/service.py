@@ -11,6 +11,7 @@ from app.order_item.model import OrderItemCreateRequest, OrderItemUpdateRequest
 from app.order_item.repository import OrderItemRepository
 from app.order_item.schemas import OrderItemCreate, OrderItemRead, OrderItemUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -98,8 +99,6 @@ class OrderItemService:
             status_code=200, message="Successful", data=_to_read(row)
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableOrderItemService = writable_service(OrderItemService)
 ReadableOrderItemService = readable_service(OrderItemService)

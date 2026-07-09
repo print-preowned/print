@@ -22,10 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pwdlib import PasswordHash
 
 from app.platform_privilege_set.repository import PlatformPrivilegeSetRepository
-from app.platform_user.model import PlatformUserCreateRequest
 from app.platform_user.repository import PlatformUserRepository
 from app.platform_user.schemas import PlatformUserCreate
-from app.user.model import UserCreateRequest
 from app.user.repository import UserRepository
 from app.user.schemas import UserCreate
 from app.utility.postgres import get_sessionmaker
@@ -73,9 +71,8 @@ async def create_super_admin_user(
             platform_user = await PlatformUserRepository(session).read_platform_user_by_user_id(
                 existing_user.id
             )
-            print(
-                f"  ✓ Created platform_user record (ID: {platform_user.id if platform_user else 'None'})"
-            )
+            platform_user_id = platform_user.id if platform_user else "None"
+            print(f"  ✓ Created platform_user record (ID: {platform_user_id})")
             return existing_user.id, platform_user.id if platform_user else None
 
         password_hash = PasswordHash.recommended()
@@ -116,7 +113,8 @@ async def main():
         print("\n✗ Error: PRINT_SA_EMAIL environment variable is required")
         print("\nUsage:")
         print(
-            "  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py"
+            "  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme "
+            "python scripts/seed_super_admin.py"
         )
         sys.exit(1)
 
@@ -124,7 +122,8 @@ async def main():
         print("\n✗ Error: PRINT_SA_PASSWORD environment variable is required")
         print("\nUsage:")
         print(
-            "  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme python scripts/seed_super_admin.py"
+            "  PRINT_SA_EMAIL=admin@example.com PRINT_SA_PASSWORD=changeme "
+            "python scripts/seed_super_admin.py"
         )
         sys.exit(1)
 

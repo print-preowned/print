@@ -10,6 +10,7 @@ from app.role_privilege.model import RolePrivilegeCreateRequest, RolePrivilegeUp
 from app.role_privilege.repository import RolePrivilegeRepository
 from app.role_privilege.schemas import RolePrivilegeCreate, RolePrivilegeRead, RolePrivilegeUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -87,8 +88,6 @@ class RolePrivilegeService:
             data=_to_read(row),
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableRolePrivilegeService = writable_service(RolePrivilegeService)
 ReadableRolePrivilegeService = readable_service(RolePrivilegeService)

@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from pydantic import BaseModel, ConfigDict
 
 
 class VariantConfig(BaseModel):
@@ -10,10 +11,6 @@ class VariantConfig(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-
-
-
-
 
 
 class VariantConfigCreateRequest(BaseModel):

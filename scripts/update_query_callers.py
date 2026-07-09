@@ -74,7 +74,6 @@ def _replace_calls(text: str, fn_map: dict[str, tuple[str, str]]) -> str:
 
 
 def _update_imports(text: str, fn_map: dict[str, tuple[str, str]]) -> str:
-    tree = ast.parse(text)
     used_modules: set[str] = set()
     for fn_name, (mod, _) in fn_map.items():
         cls = _repo_class_name(mod)

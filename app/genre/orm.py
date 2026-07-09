@@ -21,4 +21,3 @@ class GenreOrm(BaseOrm):
         ),
         Index("ix_genres_deleted_at", "deleted_at"),
     )
-

@@ -10,6 +10,7 @@ from app.book_genre.model import BookGenreCreateRequest, BookGenreUpdateRequest
 from app.book_genre.repository import BookGenreRepository
 from app.book_genre.schemas import BookGenreCreate, BookGenreRead, BookGenreUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -111,8 +112,6 @@ class BookGenreService:
             data=[_to_read(row) for row in rows],
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableBookGenreService = writable_service(BookGenreService)
 ReadableBookGenreService = readable_service(BookGenreService)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Index, String, Text, text
+from sqlalchemy import Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.utility.orm import BaseOrm

@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import ConfigDict, Field, field_serializer
+
+from pydantic import ConfigDict
+
 from app.utility.model import BaseAppModel
 
 
@@ -21,6 +23,7 @@ class Variant(BaseAppModel):
 
 class VariantCreateRequest(BaseAppModel):
     """Create sellable variant with option config (one per variant type)."""
+
     variant_option_ids: list[str]
     description: Optional[str] = None
     stock: int
@@ -32,6 +35,7 @@ class VariantCreateRequest(BaseAppModel):
 
 class VariantUpdateRequest(BaseAppModel):
     """Mutable fields only — business_book_id and config are set at create."""
+
     description: Optional[str] = None
     stock: Optional[int] = None
     price: Optional[float] = None
@@ -45,6 +49,7 @@ class VariantUpdateRequest(BaseAppModel):
 
 class ResolvedConfig(BaseAppModel):
     """Resolved variant type + option for display."""
+
     variant_type_id: str
     variant_type_name: str
     variant_option_id: str
@@ -57,6 +62,7 @@ class VariantWithConfig(Variant):
 
 class PublicCatalogVariant(BaseAppModel):
     """Customer-facing sellable variant with joined book and business data."""
+
     id: str
     business_book_id: str
     book_id: str

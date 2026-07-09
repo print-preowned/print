@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.variant.orm import VariantOrm
 from app.variant.schemas import ResolvedConfigRead, VariantCreate, VariantUpdate
-from app.variant_config.orm import VariantProductOptionValueOrm
 from app.variant_config.repository import VariantConfigRepository
 from app.variant_option.orm import ProductOptionValueOrm
 from app.variant_type.orm import ProductOptionOrm

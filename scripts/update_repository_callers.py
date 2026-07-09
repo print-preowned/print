@@ -203,12 +203,18 @@ def update_service(path: Path, fn_map: dict[str, tuple[str, str]]) -> None:
 
     # Drop stale functional imports from cross-module repository lines.
     text = re.sub(
-        r"from app\.(\w+)\.repository import [a-z_,\s]+(?: as \w+)?\n(?=from app\.\1\.repository import \w+Repository)",
+        (
+            r"from app\.(\w+)\.repository import [a-z_,\s]+(?: as \w+)?\n"
+            r"(?=from app\.\1\.repository import \w+Repository)"
+        ),
         "",
         text,
     )
     text = re.sub(
-        r"from app\.(\w+)\.repository import [a-z_,\s]+(?: as \w+)?\n(?!from app\.\1\.repository import \w+Repository)",
+        (
+            r"from app\.(\w+)\.repository import [a-z_,\s]+(?: as \w+)?\n"
+            r"(?!from app\.\1\.repository import \w+Repository)"
+        ),
         lambda m: "" if "Repository" not in m.group(0) else m.group(0),
         text,
     )
@@ -257,7 +263,11 @@ def fix_variant_cross_repo() -> None:
     if "VariantConfigRepository" in text:
         return
     text = text.replace(
-        "from app.variant_config.repository import create_variant_product_option_values, read_configs_by_variant_ids, soft_delete_configs_by_variant_id, soft_delete_configs_by_variant_ids\n",
+        (
+            "from app.variant_config.repository import "
+            "create_variant_product_option_values, read_configs_by_variant_ids, "
+            "soft_delete_configs_by_variant_id, soft_delete_configs_by_variant_ids\n"
+        ),
         "from app.variant_config.repository import VariantConfigRepository\n",
     )
     for old, new in [

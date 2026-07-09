@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 
 from app.auth.privilege_catalog import Privilege
+from app.utility.authorization import TokenPayload, require_context, require_privilege
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant.schemas import PublicCatalogVariantRead, VariantRead
 from app.variant.service import ReadableVariantService
-from app.utility.authorization import require_context, require_privilege, TokenPayload
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/variants", tags=["VariantController"])
 
@@ -18,7 +18,10 @@ async def read(
     _: TokenPayload = Depends(require_privilege(Privilege.READ_VARIANT)),
     service: ReadableVariantService = Depends(),
 ) -> PaginatedResponse[VariantRead]:
-    """Platform read-only audit view across all variants. Sellers use business-book scoped routes."""
+    """Platform read-only audit view across all variants.
+
+    Sellers use business-book scoped routes.
+    """
     param = ParamRequest(page=page, size=size, search=search)
     return await service.read(param)
 

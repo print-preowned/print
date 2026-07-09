@@ -7,6 +7,7 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
 from app.variant_type.repository import VariantTypeRepository
 from app.variant_type.schemas import ProductOptionCreate, ProductOptionRead, ProductOptionUpdate
@@ -77,8 +78,6 @@ class VariantTypeService:
             status_code=200, message="Successful", data=_to_read(row)
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableVariantTypeService = writable_service(VariantTypeService)
 ReadableVariantTypeService = readable_service(VariantTypeService)

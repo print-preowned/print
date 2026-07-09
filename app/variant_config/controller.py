@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Response
 
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant_config.model import VariantConfigCreateRequest, VariantConfigUpdateRequest
 from app.variant_config.schemas import VariantProductOptionValueRead
 from app.variant_config.service import ReadableVariantConfigService, WritableVariantConfigService
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/variant-config", tags=["VariantConfigController"])
 

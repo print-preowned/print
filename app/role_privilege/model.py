@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from pydantic import BaseModel, ConfigDict
 
 
 class RolePrivilege(BaseModel):
@@ -10,9 +11,6 @@ class RolePrivilege(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-
-
-
 
 
 class RolePrivilegeCreateRequest(BaseModel):
@@ -26,5 +24,3 @@ class RolePrivilegeUpdateRequest(BaseModel):
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
-
-

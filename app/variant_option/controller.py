@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, Response
 
+from app.utility.authorization import TokenPayload, require_context
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant_option.model import VariantOptionCreateRequest, VariantOptionUpdateRequest
 from app.variant_option.schemas import ProductOptionValueRead
 from app.variant_option.service import ReadableVariantOptionService, WritableVariantOptionService
-from app.utility.authorization import TokenPayload, require_context
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/variant-option", tags=["VariantOptionController"])
 

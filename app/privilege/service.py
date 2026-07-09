@@ -10,6 +10,7 @@ from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
 from app.privilege.repository import PrivilegeRepository
 from app.privilege.schemas import PrivilegeCreate, PrivilegeRead, PrivilegeUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -83,8 +84,6 @@ class PrivilegeService:
             status_code=200, message="Successful", data=_to_read(row)
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritablePrivilegeService = writable_service(PrivilegeService)
 ReadablePrivilegeService = readable_service(PrivilegeService)

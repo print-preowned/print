@@ -44,7 +44,8 @@ async def resend(
 ) -> dict:
     """
     Resend a pending invite with a new token.
-    Optionally update privilege set and reset expiry from server default. Invalidates previous links.
+    Optionally update privilege set and reset expiry from server default.
+    Invalidates previous links.
     """
     return await service.resend_invite(id, body, token.sub)
 

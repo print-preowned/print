@@ -7,10 +7,11 @@ Token structure requirements:
 - BUSINESS tokens require: business.id, business.privileges, business.is_owner
 """
 
-import jwt
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
+
+import jwt
 
 from app.user.schemas import UserRead
 from app.utility.config import get_settings
@@ -65,22 +66,22 @@ def create_business_token(
     role_name: str,
     is_system_role: bool,
     is_owner: bool,
-    privileges: list[str]
+    privileges: list[str],
 ) -> str:
     """
     Create a BUSINESS context token
-    
+
     Following MDC-TOKEN-B-1: Business tokens must have:
     - business.id
     - business.privileges
     - business.is_owner
     - business.role (id, name, is_system)
-    
+
     Following MDC-TOKEN-B-2: Privileges must be materialized
     """
     now = datetime.now(timezone.utc)
     exp = now + timedelta(minutes=TOKEN_TTL_MINUTES)
-    
+
     payload = {
         "iss": TOKEN_ISSUER,
         "aud": TOKEN_AUDIENCE,
@@ -100,7 +101,7 @@ def create_business_token(
             "privileges": privileges,  # Materialized privileges
         },
     }
-    
+
     return jwt.encode(payload, get_settings().jwt_secret, algorithm=JWT_ALGORITHM)
 
 
@@ -112,13 +113,13 @@ def create_platform_token(
 ) -> str:
     """
     Create a PLATFORM context token
-    
+
     Following MDC-PLATFORM-2: Platform context has no business scope
     Platform tokens contain privileges but no business information
     """
     now = datetime.now(timezone.utc)
     exp = now + timedelta(minutes=TOKEN_TTL_MINUTES)
-    
+
     payload = {
         "iss": TOKEN_ISSUER,
         "aud": TOKEN_AUDIENCE,
@@ -132,7 +133,7 @@ def create_platform_token(
     }
     if password_change_required:
         payload["pwd_chg"] = True
-    
+
     return jwt.encode(payload, get_settings().jwt_secret, algorithm=JWT_ALGORITHM)
 
 
@@ -150,4 +151,3 @@ def decode_token(token: str) -> dict:
         raise ValueError("Token has expired")
     except jwt.InvalidTokenError as e:
         raise ValueError(f"Invalid token: {str(e)}")
-

@@ -10,6 +10,7 @@ from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateReque
 from app.book_author.repository import BookAuthorRepository
 from app.book_author.schemas import BookAuthorCreate, BookAuthorRead, BookAuthorUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -111,8 +112,6 @@ class BookAuthorService:
             data=[_to_read(row) for row in rows],
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableBookAuthorService = writable_service(BookAuthorService)
 ReadableBookAuthorService = readable_service(BookAuthorService)

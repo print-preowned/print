@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, EmailStr
-from app.utility.model import BaseResponse
+
+from pydantic import BaseModel, EmailStr
 
 
 class PasswordResetToken(BaseModel):

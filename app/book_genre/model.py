@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from pydantic import BaseModel, ConfigDict
+
 from app.utility.model import BaseAppModel
 
 
@@ -11,10 +13,6 @@ class BookGenre(BaseAppModel):
     status: str
     created_at: datetime
     updated_at: datetime
-
-
-
-
 
 
 class BookGenreCreateRequest(BaseModel):
@@ -28,5 +26,3 @@ class BookGenreUpdateRequest(BaseModel):
     status: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
-
-

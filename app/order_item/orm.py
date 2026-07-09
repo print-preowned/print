@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -26,7 +26,10 @@ class OrderItemOrm(BaseOrm):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(precision=12, scale=2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
-    discount_applied: Mapped[Decimal | None] = mapped_column(Numeric(precision=5, scale=2), nullable=True)
+    discount_applied: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=5, scale=2),
+        nullable=True,
+    )
 
     __table_args__ = (
         Index("ix_order_items_order_id", "order_id"),

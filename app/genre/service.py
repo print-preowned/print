@@ -11,6 +11,7 @@ from app.genre.orm import GenreOrm
 from app.genre.repository import GenreRepository
 from app.genre.schemas import GenreCreate, GenreRead, GenreUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_genre_id(genre_id: str) -> uuid.UUID:
@@ -78,8 +79,6 @@ class GenreService:
             raise HTTPException(status_code=404, detail="Genre not found")
         return BaseResponse[GenreRead](status_code=200, message="Successful", data=_to_read(row))
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableGenreService = writable_service(GenreService)
 ReadableGenreService = readable_service(GenreService)

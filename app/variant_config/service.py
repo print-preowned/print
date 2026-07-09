@@ -7,6 +7,7 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 from app.variant_config.model import VariantConfigCreateRequest, VariantConfigUpdateRequest
 from app.variant_config.repository import VariantConfigRepository
 from app.variant_config.schemas import (
@@ -86,8 +87,6 @@ class VariantConfigService:
             data=_to_read(row),
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableVariantConfigService = writable_service(VariantConfigService)
 ReadableVariantConfigService = readable_service(VariantConfigService)

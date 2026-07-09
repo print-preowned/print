@@ -7,7 +7,6 @@ from sqlalchemy import DateTime, MetaData, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
-
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -62,4 +61,3 @@ class BaseOrm(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, StatusMixin,
     """Default ORM base for domain tables with UUID PK, timestamps, soft delete, and status."""
 
     __abstract__ = True
-

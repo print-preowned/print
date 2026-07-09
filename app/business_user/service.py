@@ -10,6 +10,7 @@ from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdat
 from app.business_user.repository import BusinessUserRepository
 from app.business_user.schemas import BusinessUserCreate, BusinessUserRead, BusinessUserUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -101,8 +102,6 @@ class BusinessUserService:
             data=[_to_read(row) for row in rows],
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableBusinessUserService = writable_service(BusinessUserService)
 ReadableBusinessUserService = readable_service(BusinessUserService)

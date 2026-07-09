@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Business(BaseModel):
@@ -17,8 +18,6 @@ class Business(BaseModel):
     @classmethod
     def normalize_user_id(cls, value: object) -> str:
         return str(value)
-
-
 
 
 class BusinessCreateRequest(BaseModel):
@@ -41,5 +40,3 @@ class BusinessUpdateRequest(BaseModel):
 
 class BusinessCreateResponse(BaseModel):
     token: str
-
-

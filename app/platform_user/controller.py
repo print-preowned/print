@@ -52,7 +52,7 @@ async def transfer_super_admin(
     token: TokenPayload = Depends(require_context("PLATFORM")),
     service: WritablePlatformUserService = Depends(),
 ) -> Response:
-    """Transfer super admin role to another platform user. Caller must be the current super admin."""
+    """Transfer super admin role. Caller must be the current super admin."""
     return await service.transfer_super_admin(
         token.sub,
         str(body.target_platform_user_id),

@@ -7,10 +7,10 @@ from app.business_book.model import (
     BusinessBookWithVariantSummary,
 )
 from app.business_book.service import ReadableBusinessBookService, WritableBusinessBookService
+from app.utility.authorization import TokenPayload, get_business_id, require_context
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant.model import VariantCreateRequest, VariantUpdateRequest, VariantWithConfig
 from app.variant.service import ReadableVariantService, WritableVariantService
-from app.utility.authorization import get_business_id, require_context, TokenPayload
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/business-book", tags=["BusinessBookController"])
 

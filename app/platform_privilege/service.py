@@ -57,7 +57,9 @@ class PlatformPrivilegeService:
             if existing and str(existing.id) != id:
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Platform privilege with code '{platform_privilege.code}' already exists",
+                    detail=(
+                        f"Platform privilege with code '{platform_privilege.code}' already exists"
+                    ),
                 )
 
         updated = await self._repo.update_platform_privilege(

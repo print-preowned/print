@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, Response
 
+from app.utility.authorization import TokenPayload, require_context
+from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
 from app.variant_type.schemas import ProductOptionRead
 from app.variant_type.service import ReadableVariantTypeService, WritableVariantTypeService
-from app.utility.authorization import TokenPayload, require_context
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/variant-type", tags=["VariantTypeController"])
 

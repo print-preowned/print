@@ -1,10 +1,9 @@
-import re
+from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from fastapi import HTTPException
-from app.utility.authorization import get_token_payload
 
+from app.utility.authorization import get_token_payload
 
 PUBLIC_EXACT_PATHS = (
     "/user/login",
@@ -42,7 +41,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not hasattr(request.app.state, "authenticated"):
             request.app.state.authenticated = {}
 
-
         if _is_public_path(request.url.path):
             # request.app.state.user = {"user":23}
             response = await call_next(request)
@@ -55,19 +53,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Store token payload in request state for use in controllers
             request.state.token_payload = token_payload
             request.state.user_id = token_payload.sub
-            
+
             # For backward compatibility, store user_id in app state
             if not hasattr(request.app.state, "authenticated"):
                 request.app.state.authenticated = {}
             request.app.state.authenticated[token_payload.sub] = True
-            
+
         except HTTPException as e:
             print(f"========>  1: {str(e)}")
             # Return JSONResponse for middleware (can't raise HTTPException in middleware)
             return JSONResponse(status_code=e.status_code, content={"detail": str(e.detail)})
         except Exception as e:
             print(f"========> 2: {str(e)}")
-            return JSONResponse(status_code=401, content={"detail": f"Authentication failed: {str(e)}"})
+            return JSONResponse(
+                status_code=401,
+                content={"detail": f"Authentication failed: {str(e)}"},
+            )
 
         token_payload = request.state.token_payload
         if (
@@ -79,5 +80,5 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 status_code=403,
                 content={"detail": "Password change required before accessing platform resources"},
             )
-        
+
         return await call_next(request)

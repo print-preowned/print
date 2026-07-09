@@ -78,9 +78,7 @@ def send_email(*, to: str, subject: str, html_body: str, text_body: str) -> None
             "Mail server rejected the SMTP credentials. Check SMTP_USER and SMTP_PASSWORD."
         ) from exc
     except smtplib.SMTPException as exc:
-        raise EmailDeliveryError(
-            f"Mail server rejected the message: {exc}"
-        ) from exc
+        raise EmailDeliveryError(f"Mail server rejected the message: {exc}") from exc
     except OSError as exc:
         raise EmailDeliveryError(
             f"Could not connect to the mail server ({settings.smtp_host}:{settings.smtp_port})."

@@ -1,17 +1,21 @@
-from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from typing import Optional
+
+from pydantic import BaseModel
+
 from app.utility.model import BaseAppModel
 
 
 class AuthorRef(BaseModel):
     """Minimal author for book read response."""
+
     id: str
     name: str
 
 
 class GenreRef(BaseModel):
     """Minimal genre for book read response."""
+
     id: str
     name: str
 
@@ -50,5 +54,6 @@ class BookUploadUrlResponse(BaseModel):
 
 class BookReadResponse(Book):
     """Book with related authors and genres populated."""
+
     authors: list[AuthorRef] = []
     genres: list[GenreRef] = []

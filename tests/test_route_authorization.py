@@ -6,8 +6,6 @@ import ast
 import re
 from pathlib import Path
 
-import pytest
-
 from app.auth.privilege_catalog import (
     DEPRECATED_PRIVILEGE_CODES,
     all_catalog_privilege_codes,
@@ -18,9 +16,7 @@ from app.auth.privilege_catalog import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = REPO_ROOT / "app"
 
-PRIVILEGE_RE = re.compile(
-    r'require_privilege(?:_and_owner)?\(\s*["\']([^"\']+)["\']'
-)
+PRIVILEGE_RE = re.compile(r'require_privilege(?:_and_owner)?\(\s*["\']([^"\']+)["\']')
 
 # BUSINESS routes still context-only until the method-only REST migration adds privileges.
 KNOWN_UNGUARDED_BUSINESS_ROUTES: frozenset[str] = frozenset(
@@ -87,9 +83,7 @@ def _collect_business_context_only_routes() -> set[str]:
                 route_path = prefix
                 if dec.args and isinstance(dec.args[0], ast.Constant):
                     route_path += str(dec.args[0].value)
-                source = ast.get_source_segment(
-                    path.read_text(encoding="utf-8"), node
-                ) or ""
+                source = ast.get_source_segment(path.read_text(encoding="utf-8"), node) or ""
                 has_context = 'require_context("BUSINESS")' in source
                 has_privilege = "require_privilege" in source
                 has_owner = "require_owner" in source
@@ -135,6 +129,4 @@ class TestRouteAuthorization:
     def test_allowlist_has_no_stale_entries(self) -> None:
         unguarded = _collect_business_context_only_routes()
         stale = sorted(KNOWN_UNGUARDED_BUSINESS_ROUTES - unguarded)
-        assert stale == [], (
-            f"Remove fixed routes from KNOWN_UNGUARDED_BUSINESS_ROUTES: {stale}"
-        )
+        assert stale == [], f"Remove fixed routes from KNOWN_UNGUARDED_BUSINESS_ROUTES: {stale}"

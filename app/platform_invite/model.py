@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, EmailStr
-from app.utility.model import BaseAppModel, BaseResponse
+
+from pydantic import BaseModel, EmailStr
+
+from app.utility.model import BaseAppModel
 
 
 class PlatformInvite(BaseAppModel):
@@ -62,4 +64,5 @@ class PlatformInviteRejectRequest(BaseModel):
 
 class PlatformInviteWithPrivilegeSet(PlatformInvite):
     """Platform invite with populated privilege set name for list/read."""
+
     platform_privilege_set_name: Optional[str] = None

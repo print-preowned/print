@@ -1,10 +1,9 @@
 from datetime import datetime
 from typing import Optional
+
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field,
-    field_serializer,
 )
 
 
@@ -19,8 +18,6 @@ class Author(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-
-
 
 
 class AuthorCreateRequest(BaseModel):

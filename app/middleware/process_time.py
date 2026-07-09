@@ -1,4 +1,5 @@
 from time import perf_counter
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 

@@ -10,6 +10,7 @@ from app.role.model import OWNER_ROLE_CODE, RoleCreateRequest, RoleUpdateRequest
 from app.role.repository import RoleRepository
 from app.role.schemas import RoleCreate, RoleRead, RoleUpdate
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -90,8 +91,6 @@ class RoleService:
             data=_to_read(role) if role else None,
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableRoleService = writable_service(RoleService)
 ReadableRoleService = readable_service(RoleService)

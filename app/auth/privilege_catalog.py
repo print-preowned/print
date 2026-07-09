@@ -77,9 +77,7 @@ BUSINESS_CRUD_RESOURCES: Final[tuple[CrudResourceDef, ...]] = (
 PLATFORM_PRIVILEGES: Final[tuple[PlatformPrivilegeDef, ...]] = (
     PlatformPrivilegeDef("MANAGE_PLATFORM_USERS", "Manage platform users"),
     PlatformPrivilegeDef("MANAGE_PLATFORM_PRIVILEGES", "Manage platform privileges"),
-    PlatformPrivilegeDef(
-        "MANAGE_PLATFORM_PRIVILEGE_SETS", "Manage platform privilege sets"
-    ),
+    PlatformPrivilegeDef("MANAGE_PLATFORM_PRIVILEGE_SETS", "Manage platform privilege sets"),
     PlatformPrivilegeDef("VIEW_PLATFORM_ANALYTICS", "View platform analytics"),
     PlatformPrivilegeDef("MANAGE_BUSINESSES", "Manage all businesses on the platform"),
     PlatformPrivilegeDef("MANAGE_USERS", "Manage all users on the platform"),

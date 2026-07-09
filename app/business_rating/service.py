@@ -14,6 +14,7 @@ from app.business_rating.schemas import (
     BusinessRatingUpdate,
 )
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.service_deps import readable_service, writable_service
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -105,8 +106,6 @@ class BusinessRatingService:
             data=[_to_read(row) for row in rows],
         )
 
-
-from app.utility.service_deps import readable_service, writable_service
 
 WritableBusinessRatingService = writable_service(BusinessRatingService)
 ReadableBusinessRatingService = readable_service(BusinessRatingService)
