@@ -107,5 +107,9 @@ class BookRatingService:
         )
 
 
-WritableBookRatingService = writable_service(BookRatingService)
-ReadableBookRatingService = readable_service(BookRatingService)
+class WritableBookRatingService(writable_service(BookRatingService)):
+    pass
+
+
+class ReadableBookRatingService(readable_service(BookRatingService)):
+    pass

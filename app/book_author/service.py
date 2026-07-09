@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateRequest
 from app.book_author.repository import BookAuthorRepository
 from app.book_author.schemas import BookAuthorCreate, BookAuthorRead, BookAuthorUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseFilter, BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -66,7 +66,9 @@ class BookAuthorService:
             raise HTTPException(status_code=404, detail="Mapping not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[BookAuthorRead]:
+    async def read(
+        self, params: ParamRequest[BaseFilter]
+    ) -> PaginatedResponse[BookAuthorRead]:
         page = max(1, params.page)
         size = params.size
         offset = (page - 1) * size
@@ -113,5 +115,9 @@ class BookAuthorService:
         )
 
 
-WritableBookAuthorService = writable_service(BookAuthorService)
-ReadableBookAuthorService = readable_service(BookAuthorService)
+class WritableBookAuthorService(writable_service(BookAuthorService)):
+    pass
+
+
+class ReadableBookAuthorService(readable_service(BookAuthorService)):
+    pass

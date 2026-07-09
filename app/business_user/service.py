@@ -103,5 +103,9 @@ class BusinessUserService:
         )
 
 
-WritableBusinessUserService = writable_service(BusinessUserService)
-ReadableBusinessUserService = readable_service(BusinessUserService)
+class WritableBusinessUserService(writable_service(BusinessUserService)):
+    pass
+
+
+class ReadableBusinessUserService(readable_service(BusinessUserService)):
+    pass

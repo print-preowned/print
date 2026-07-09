@@ -85,5 +85,9 @@ class PrivilegeService:
         )
 
 
-WritablePrivilegeService = writable_service(PrivilegeService)
-ReadablePrivilegeService = readable_service(PrivilegeService)
+class WritablePrivilegeService(writable_service(PrivilegeService)):
+    pass
+
+
+class ReadablePrivilegeService(readable_service(PrivilegeService)):
+    pass

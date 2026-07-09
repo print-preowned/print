@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, Request, Response
 
 from app.platform_user.model import (
-    PlatformUser,
     PlatformUserCreateRequest,
     PlatformUserUpdateRequest,
     PlatformUserWithUser,
     SuperAdminTransferRequest,
 )
+from app.platform_user.schemas import PlatformUserRead
 from app.platform_user.service import ReadablePlatformUserService, WritablePlatformUserService
 from app.user.model import LoginRequest, LoginResponse
 from app.utility.authorization import TokenPayload, require_context, require_privilege
@@ -104,7 +104,7 @@ async def read_by_id(
     id: str,
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),
     service: ReadablePlatformUserService = Depends(),
-) -> BaseResponse[PlatformUser]:
+) -> BaseResponse[PlatformUserRead]:
     """
     Read a platform user by ID
     Requires PLATFORM context and MANAGE_PLATFORM_USERS privilege
@@ -117,7 +117,7 @@ async def read_by_user_id(
     user_id: str,
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),
     service: ReadablePlatformUserService = Depends(),
-) -> BaseResponse[PlatformUser | None]:
+) -> BaseResponse[PlatformUserRead | None]:
     """
     Read a platform user by user ID
     Requires PLATFORM context and MANAGE_PLATFORM_USERS privilege

@@ -127,5 +127,9 @@ class VariantOptionService:
         )
 
 
-WritableVariantOptionService = writable_service(VariantOptionService)
-ReadableVariantOptionService = readable_service(VariantOptionService)
+class WritableVariantOptionService(writable_service(VariantOptionService)):
+    pass
+
+
+class ReadableVariantOptionService(readable_service(VariantOptionService)):
+    pass

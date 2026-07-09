@@ -79,5 +79,9 @@ class VariantTypeService:
         )
 
 
-WritableVariantTypeService = writable_service(VariantTypeService)
-ReadableVariantTypeService = readable_service(VariantTypeService)
+class WritableVariantTypeService(writable_service(VariantTypeService)):
+    pass
+
+
+class ReadableVariantTypeService(readable_service(VariantTypeService)):
+    pass

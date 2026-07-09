@@ -92,5 +92,9 @@ class RoleService:
         )
 
 
-WritableRoleService = writable_service(RoleService)
-ReadableRoleService = readable_service(RoleService)
+class WritableRoleService(writable_service(RoleService)):
+    pass
+
+
+class ReadableRoleService(readable_service(RoleService)):
+    pass

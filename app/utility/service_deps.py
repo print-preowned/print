@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Annotated, TypeVar
+from typing import Annotated, Any, Protocol, TypeVar, cast
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utility.postgres import get_db, get_session
 
-T = TypeVar("T")
+
+class _SessionService(Protocol):
+    def __init__(self, session: AsyncSession) -> None: ...
+
+
+T = TypeVar("T", bound=_SessionService)
 
 
 def writable_service(base: type[T]) -> type[T]:
@@ -17,7 +22,7 @@ def writable_service(base: type[T]) -> type[T]:
 
     class _Writable(base):  # type: ignore[misc, valid-type]
         def __init__(self, session: Annotated[AsyncSession, Depends(get_db)]) -> None:
-            super().__init__(session)
+            cast(Any, super()).__init__(session)
 
     _Writable.__name__ = f"Writable{base.__name__}"
     _Writable.__qualname__ = f"Writable{base.__name__}"
@@ -29,7 +34,7 @@ def readable_service(base: type[T]) -> type[T]:
 
     class _Readable(base):  # type: ignore[misc, valid-type]
         def __init__(self, session: Annotated[AsyncSession, Depends(get_session)]) -> None:
-            super().__init__(session)
+            cast(Any, super()).__init__(session)
 
     _Readable.__name__ = f"Readable{base.__name__}"
     _Readable.__qualname__ = f"Readable{base.__name__}"

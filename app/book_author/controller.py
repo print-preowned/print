@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Response
 from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateRequest
 from app.book_author.schemas import BookAuthorRead
 from app.book_author.service import ReadableBookAuthorService, WritableBookAuthorService
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseFilter, BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/book-author", tags=["BookAuthorController"])
 
@@ -49,7 +49,7 @@ async def read(
     search: str | None = None,
     service: ReadableBookAuthorService = Depends(),
 ) -> PaginatedResponse[BookAuthorRead]:
-    param = ParamRequest(page=page, size=size, search=search)
+    param: ParamRequest[BaseFilter] = ParamRequest(page=page, size=size, search=search)
     return await service.read(param)
 
 

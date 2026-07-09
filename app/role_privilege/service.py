@@ -89,5 +89,9 @@ class RolePrivilegeService:
         )
 
 
-WritableRolePrivilegeService = writable_service(RolePrivilegeService)
-ReadableRolePrivilegeService = readable_service(RolePrivilegeService)
+class WritableRolePrivilegeService(writable_service(RolePrivilegeService)):
+    pass
+
+
+class ReadableRolePrivilegeService(readable_service(RolePrivilegeService)):
+    pass

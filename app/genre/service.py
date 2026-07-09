@@ -80,5 +80,9 @@ class GenreService:
         return BaseResponse[GenreRead](status_code=200, message="Successful", data=_to_read(row))
 
 
-WritableGenreService = writable_service(GenreService)
-ReadableGenreService = readable_service(GenreService)
+class WritableGenreService(writable_service(GenreService)):
+    pass
+
+
+class ReadableGenreService(readable_service(GenreService)):
+    pass

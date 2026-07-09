@@ -91,5 +91,9 @@ class OrderService:
         return BaseResponse[OrderRead](status_code=200, message="Successful", data=_to_read(row))
 
 
-WritableOrderService = writable_service(OrderService)
-ReadableOrderService = readable_service(OrderService)
+class WritableOrderService(writable_service(OrderService)):
+    pass
+
+
+class ReadableOrderService(readable_service(OrderService)):
+    pass

@@ -88,5 +88,9 @@ class VariantConfigService:
         )
 
 
-WritableVariantConfigService = writable_service(VariantConfigService)
-ReadableVariantConfigService = readable_service(VariantConfigService)
+class WritableVariantConfigService(writable_service(VariantConfigService)):
+    pass
+
+
+class ReadableVariantConfigService(readable_service(VariantConfigService)):
+    pass

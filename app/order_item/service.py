@@ -100,5 +100,9 @@ class OrderItemService:
         )
 
 
-WritableOrderItemService = writable_service(OrderItemService)
-ReadableOrderItemService = readable_service(OrderItemService)
+class WritableOrderItemService(writable_service(OrderItemService)):
+    pass
+
+
+class ReadableOrderItemService(readable_service(OrderItemService)):
+    pass

@@ -107,5 +107,9 @@ class BusinessRatingService:
         )
 
 
-WritableBusinessRatingService = writable_service(BusinessRatingService)
-ReadableBusinessRatingService = readable_service(BusinessRatingService)
+class WritableBusinessRatingService(writable_service(BusinessRatingService)):
+    pass
+
+
+class ReadableBusinessRatingService(readable_service(BusinessRatingService)):
+    pass

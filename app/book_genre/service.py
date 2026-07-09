@@ -113,5 +113,9 @@ class BookGenreService:
         )
 
 
-WritableBookGenreService = writable_service(BookGenreService)
-ReadableBookGenreService = readable_service(BookGenreService)
+class WritableBookGenreService(writable_service(BookGenreService)):
+    pass
+
+
+class ReadableBookGenreService(readable_service(BookGenreService)):
+    pass
