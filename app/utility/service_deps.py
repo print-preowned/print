@@ -1,7 +1,5 @@
 """FastAPI DI helpers for request-scoped service classes."""
 
-from __future__ import annotations
-
 from typing import Annotated, Any, Protocol, TypeVar, cast
 
 from fastapi import Depends
