@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
 from app.business_user.repository import BusinessUserRepository
 from app.business_user.schemas import BusinessUserCreate, BusinessUserRead, BusinessUserUpdate
+from app.user.repository import UserRepository
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.revocation import revoke_user_active_session
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -44,6 +46,7 @@ class BusinessUserService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = BusinessUserRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def create(self, mapping: BusinessUserCreateRequest) -> Response:
         await self._repo.create_business_user(_to_create(mapping))
@@ -51,16 +54,34 @@ class BusinessUserService:
 
     async def update(self, id: str, mapping: BusinessUserUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
+        existing = await self._repo.read_business_user_by_id(parsed_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Mapping not found")
+
+        update_data = mapping.model_dump(exclude_unset=True)
+        authority_changed = any(
+            field in update_data and update_data[field] is not None
+            for field in ("role_id", "status")
+        )
         updated = await self._repo.update_business_user(parsed_id, _to_update(mapping))
         if updated is None:
             raise HTTPException(status_code=404, detail="Mapping not found")
+
+        if authority_changed:
+            await revoke_user_active_session(self._user_repo, existing.user_id)
         return Response(status_code=200)
 
     async def delete(self, id: str) -> Response:
         parsed_id = _parse_id(id)
-        deleted = await self._repo.soft_delete_business_user(parsed_id)
+        existing = await self._repo.read_business_user_by_id(parsed_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Mapping not found")
+
+        deleted = await self._repo.delete_business_user(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Mapping not found")
+
+        await revoke_user_active_session(self._user_repo, existing.user_id)
         return Response(status_code=204)
 
     async def read(self, params: ParamRequest) -> PaginatedResponse[BusinessUserRead]:

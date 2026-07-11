@@ -31,7 +31,7 @@ class BusinessUserRepository:
         await self._session.flush()
         return mapping
 
-    async def soft_delete_business_user(self, business_user_id: uuid.UUID) -> bool:
+    async def delete_business_user(self, business_user_id: uuid.UUID) -> bool:
         deleted_id = await self._session.scalar(
             update(BusinessUserOrm)
             .where(BusinessUserOrm.id == business_user_id, BusinessUserOrm.deleted_at.is_(None))
@@ -39,6 +39,18 @@ class BusinessUserRepository:
             .returning(BusinessUserOrm.id)
         )
         return deleted_id is not None
+
+    async def delete_by_business_id(self, business_id: uuid.UUID) -> int:
+        result = await self._session.scalars(
+            update(BusinessUserOrm)
+            .where(
+                BusinessUserOrm.business_id == business_id,
+                BusinessUserOrm.deleted_at.is_(None),
+            )
+            .values(deleted_at=datetime.now(UTC))
+            .returning(BusinessUserOrm.user_id)
+        )
+        return len(list(result))
 
     async def read_business_user_by_id(self, business_user_id: uuid.UUID) -> BusinessUserOrm | None:
         return await self._session.scalar(

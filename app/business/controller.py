@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.business.model import BusinessCreateRequest, BusinessCreateResponse, BusinessUpdateRequest
+from app.business.model import BusinessCreateRequest, BusinessCreateResponse, BusinessDeleteResponse, BusinessUpdateRequest
 from app.business.schemas import BusinessRead
 from app.business.service import ReadableBusinessService, WritableBusinessService
 from app.utility.authorization import (
@@ -42,11 +42,11 @@ async def delete(
     id: str,
     token: TokenPayload = Depends(require_owner()),
     service: WritableBusinessService = Depends(),
-) -> Response:
+) -> BusinessDeleteResponse:
     business_id = get_business_id(token)
     if business_id != id:
         raise HTTPException(status_code=403, detail="Can only delete your own business")
-    return await service.delete(id)
+    return await service.delete(id, token)
 
 
 @router.get("", tags=["client"])

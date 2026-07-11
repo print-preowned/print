@@ -8,7 +8,12 @@ from fastapi.responses import Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.business.model import BusinessCreateRequest, BusinessCreateResponse, BusinessUpdateRequest
+from app.business.model import (
+    BusinessCreateRequest,
+    BusinessCreateResponse,
+    BusinessDeleteResponse,
+    BusinessUpdateRequest,
+)
 from app.business.repository import BusinessRepository
 from app.business.schemas import BusinessCreate, BusinessRead, BusinessUpdate
 from app.business_user.repository import BusinessUserRepository
@@ -17,7 +22,10 @@ from app.role.model import OWNER_ROLE_CODE
 from app.role.repository import RoleRepository
 from app.user.repository import UserRepository
 from app.user.schemas import UserRead
+from app.utility.authorization import TokenPayload
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.redis import set_key
+from app.utility.revocation import revoke_token_payload, revoke_user_active_session
 from app.utility.service_deps import readable_service, writable_service
 from app.utility.token import create_customer_token
 
@@ -115,12 +123,31 @@ class BusinessService:
             raise HTTPException(status_code=404, detail="Business not found")
         return Response(status_code=200)
 
-    async def delete(self, id: str) -> Response:
+    async def delete(self, id: str, token: TokenPayload) -> BusinessDeleteResponse:
         parsed_id = _parse_business_id(id)
+        business = await self._repo.read_by_id(parsed_id)
+        if business is None:
+            raise HTTPException(status_code=404, detail="Business not found")
+
+        members = await self._business_user_repo.read_business_users_by_business_id(parsed_id)
         deleted = await self._repo.delete(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Business not found")
-        return Response(status_code=204)
+
+        await self._business_user_repo.delete_by_business_id(parsed_id)
+
+        for member in members:
+            await revoke_user_active_session(self._user_repo, member.user_id)
+        revoke_token_payload(token)
+
+        owner_row = await self._user_repo.read_user_by_id(business.user_id)
+        if owner_row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        owner = UserRead.model_validate(owner_row)
+
+        new_token = create_customer_token(owner, has_business=False)
+        set_key(owner.email, new_token, 60 * 60 * 24)
+        return BusinessDeleteResponse(token=new_token)
 
     async def read(self, params: ParamRequest) -> PaginatedResponse[BusinessRead]:
         page = max(1, params.page)

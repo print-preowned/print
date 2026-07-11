@@ -40,3 +40,7 @@ class BusinessUpdateRequest(BaseModel):
 
 class BusinessCreateResponse(BaseModel):
     token: str
+
+
+class BusinessDeleteResponse(BaseModel):
+    token: str
