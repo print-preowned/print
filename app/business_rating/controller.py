@@ -17,7 +17,7 @@ async def create(
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: WritableBusinessRatingService = Depends(),
 ) -> Response:
-    return await service.create(payload)
+    return await service.create(business_id, token.sub, payload)
 
 
 @customer_router.get("")

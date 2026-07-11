@@ -246,7 +246,6 @@ class UserService:
             raise HTTPException(status_code=404, detail="Business not found")
 
         is_owner = str(business.user_id) == user_id
-        is_system_role = False
 
         if is_owner:
             owner_role = await self._role_repo.read_role_by_code(OWNER_ROLE_CODE)
@@ -257,6 +256,7 @@ class UserService:
                 )
             role_id = str(owner_role.id)
             role_name = owner_role.name
+            is_system_role = True
             privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
                 owner_role.id
             )
@@ -267,6 +267,7 @@ class UserService:
                 membership.role_id
             )
             role_name = role_record.name if role_record else "Member"
+            is_system_role = role_record is not None and role_record.code == OWNER_ROLE_CODE
 
         token = create_business_token(
             user_id,

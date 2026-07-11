@@ -17,16 +17,12 @@ class BusinessRating(BaseModel):
 
 
 class BusinessRatingCreateRequest(BaseModel):
-    business_id: str
-    user_id: str
     order_item_id: str | None = None
     rating: int
     review: Optional[str] = None
 
 
 class BusinessRatingUpdateRequest(BaseModel):
-    business_id: str | None = None
-    user_id: str | None = None
     order_item_id: str | None = None
     rating: Optional[int] = None
     review: Optional[str] = None

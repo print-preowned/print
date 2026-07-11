@@ -25,10 +25,14 @@ def _to_read(row) -> BusinessRatingRead:
     return BusinessRatingRead.model_validate(row)
 
 
-def _to_create(payload: BusinessRatingCreateRequest) -> BusinessRatingCreate:
+def _to_create(
+    business_id: str,
+    user_id: str,
+    payload: BusinessRatingCreateRequest,
+) -> BusinessRatingCreate:
     data = payload.model_dump(include=set(BusinessRatingCreate.model_fields.keys()))
-    data["business_id"] = _parse_id(str(data["business_id"]))
-    data["user_id"] = _parse_id(str(data["user_id"]))
+    data["business_id"] = _parse_id(business_id)
+    data["user_id"] = _parse_id(user_id)
     if data.get("order_item_id") is not None:
         data["order_item_id"] = _parse_id(str(data["order_item_id"]))
     return BusinessRatingCreate.model_validate(data)
@@ -39,17 +43,18 @@ class BusinessRatingService:
         self._session = session
         self._repo = BusinessRatingRepository(session)
 
-    async def create(self, rating: BusinessRatingCreateRequest) -> Response:
-        await self._repo.create_business_rating(_to_create(rating))
+    async def create(
+        self,
+        business_id: str,
+        user_id: str,
+        rating: BusinessRatingCreateRequest,
+    ) -> Response:
+        await self._repo.create_business_rating(_to_create(business_id, user_id, rating))
         return Response(status_code=201)
 
     async def update(self, id: str, rating: BusinessRatingUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
         update_data = rating.model_dump(exclude_unset=True)
-        if "business_id" in update_data and update_data["business_id"] is not None:
-            update_data["business_id"] = _parse_id(str(update_data["business_id"]))
-        if "user_id" in update_data and update_data["user_id"] is not None:
-            update_data["user_id"] = _parse_id(str(update_data["user_id"]))
         if "order_item_id" in update_data and update_data["order_item_id"] is not None:
             update_data["order_item_id"] = _parse_id(str(update_data["order_item_id"]))
 
