@@ -16,12 +16,10 @@ class BookAuthor(BaseAppModel):
 
 
 class BookAuthorCreateRequest(BaseModel):
-    book_id: str
     author_id: str
 
 
 class BookAuthorUpdateRequest(BaseModel):
-    book_id: str | None = None
     author_id: str | None = None
     status: Optional[str] = None
 

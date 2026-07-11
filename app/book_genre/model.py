@@ -16,12 +16,10 @@ class BookGenre(BaseAppModel):
 
 
 class BookGenreCreateRequest(BaseModel):
-    book_id: str
     genre_id: str
 
 
 class BookGenreUpdateRequest(BaseModel):
-    book_id: str | None = None
     genre_id: str | None = None
     status: Optional[str] = None
 

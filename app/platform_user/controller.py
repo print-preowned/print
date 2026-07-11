@@ -12,7 +12,7 @@ from app.user.model import LoginRequest, LoginResponse
 from app.utility.authorization import TokenPayload, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
-router = APIRouter(prefix="/platform-user", tags=["platform-user"])
+router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
 
 @router.post("", status_code=201, tags=["platform"])

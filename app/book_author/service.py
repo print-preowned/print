@@ -26,19 +26,21 @@ class BookAuthorService:
         self._session = session
         self._repo = BookAuthorRepository(session)
 
-    async def create(self, mapping: BookAuthorCreateRequest) -> Response:
+    async def create(self, book_id: str, mapping: BookAuthorCreateRequest) -> Response:
         payload = BookAuthorCreate(
-            book_id=_parse_id(mapping.book_id),
+            book_id=_parse_id(book_id),
             author_id=_parse_id(mapping.author_id),
         )
         await self._repo.create_book_author(payload)
         return Response(status_code=201)
 
-    async def update(self, id: str, mapping: BookAuthorUpdateRequest) -> Response:
+    async def update(self, book_id: str, id: str, mapping: BookAuthorUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
+        row = await self._repo.read_book_author_by_id(parsed_id)
+        if row is None or str(row.book_id) != book_id:
+            raise HTTPException(status_code=404, detail="Mapping not found")
+
         update_data = mapping.model_dump(exclude_unset=True)
-        if "book_id" in update_data and update_data["book_id"] is not None:
-            update_data["book_id"] = _parse_id(update_data["book_id"])
         if "author_id" in update_data and update_data["author_id"] is not None:
             update_data["author_id"] = _parse_id(update_data["author_id"])
 

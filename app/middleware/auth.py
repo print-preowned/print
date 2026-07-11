@@ -6,20 +6,20 @@ from starlette.responses import JSONResponse, Response
 from app.utility.authorization import get_token_payload
 
 PUBLIC_EXACT_PATHS = (
-    "/user/login",
-    "/user/signup",
-    "/platform-user/login",
-    "/author/read",
-    "/book/read",
+    "/auth/login",
+    "/auth/signup",
+    "/admin/users/login",
+    "/authors",
+    "/books",
 )
 
 PUBLIC_PATHS_PREFIX = (
     "/docs",
     "/openapi.json",
     "/redoc",
-    "/platform-invite/validate",
-    "/platform-invite/accept",
-    "/platform-invite/reject",
+    "/admin/invites/validate",
+    "/admin/invites/accept",
+    "/admin/invites/reject",
 )
 
 

@@ -26,9 +26,9 @@ class BookGenreService:
         self._session = session
         self._repo = BookGenreRepository(session)
 
-    async def create(self, mapping: BookGenreCreateRequest) -> Response:
+    async def create(self, book_id: str, mapping: BookGenreCreateRequest) -> Response:
         payload = BookGenreCreate(
-            book_id=_parse_id(mapping.book_id),
+            book_id=_parse_id(book_id),
             genre_id=_parse_id(mapping.genre_id),
         )
         await self._repo.create_book_genre(payload)

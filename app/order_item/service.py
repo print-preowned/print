@@ -22,9 +22,9 @@ def _to_read(row) -> OrderItemRead:
     return OrderItemRead.model_validate(row)
 
 
-def _to_create(payload: OrderItemCreateRequest) -> OrderItemCreate:
+def _to_create(order_id: str, payload: OrderItemCreateRequest) -> OrderItemCreate:
     data = payload.model_dump(include=set(OrderItemCreate.model_fields.keys()))
-    data["order_id"] = _parse_id(str(data["order_id"]))
+    data["order_id"] = _parse_id(order_id)
     data["variant_id"] = _parse_id(str(data["variant_id"]))
     data["unit_price"] = Decimal(str(data["unit_price"]))
     if data.get("discount_applied") is not None:
@@ -32,20 +32,28 @@ def _to_create(payload: OrderItemCreateRequest) -> OrderItemCreate:
     return OrderItemCreate.model_validate(data)
 
 
+def _assert_belongs_to_order(row, order_id: str) -> None:
+    if str(row.order_id) != order_id:
+        raise HTTPException(status_code=404, detail="OrderItem not found")
+
+
 class OrderItemService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = OrderItemRepository(session)
 
-    async def create(self, item: OrderItemCreateRequest) -> Response:
-        await self._repo.create_order_item(_to_create(item))
+    async def create(self, order_id: str, item: OrderItemCreateRequest) -> Response:
+        await self._repo.create_order_item(_to_create(order_id, item))
         return Response(status_code=201)
 
-    async def update(self, id: str, item: OrderItemUpdateRequest) -> Response:
+    async def update(self, order_id: str, id: str, item: OrderItemUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
+        row = await self._repo.read_order_item_by_id(parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="OrderItem not found")
+        _assert_belongs_to_order(row, order_id)
+
         update_data = item.model_dump(exclude_unset=True)
-        if "order_id" in update_data and update_data["order_id"] is not None:
-            update_data["order_id"] = _parse_id(str(update_data["order_id"]))
         if "variant_id" in update_data and update_data["variant_id"] is not None:
             update_data["variant_id"] = _parse_id(str(update_data["variant_id"]))
         if "unit_price" in update_data and update_data["unit_price"] is not None:
@@ -61,8 +69,13 @@ class OrderItemService:
             raise HTTPException(status_code=404, detail="OrderItem not found")
         return Response(status_code=200)
 
-    async def delete(self, id: str) -> Response:
+    async def delete(self, order_id: str, id: str) -> Response:
         parsed_id = _parse_id(id)
+        row = await self._repo.read_order_item_by_id(parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="OrderItem not found")
+        _assert_belongs_to_order(row, order_id)
+
         deleted = await self._repo.soft_delete_order_item(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="OrderItem not found")
@@ -90,11 +103,12 @@ class OrderItemService:
             ),
         )
 
-    async def read_by_id(self, id: str) -> BaseResponse[OrderItemRead]:
+    async def read_by_id(self, order_id: str, id: str) -> BaseResponse[OrderItemRead]:
         parsed_id = _parse_id(id)
         row = await self._repo.read_order_item_by_id(parsed_id)
         if row is None:
             raise HTTPException(status_code=404, detail="OrderItem not found")
+        _assert_belongs_to_order(row, order_id)
         return BaseResponse[OrderItemRead](
             status_code=200, message="Successful", data=_to_read(row)
         )

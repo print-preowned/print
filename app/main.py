@@ -6,6 +6,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from starlette.routing import BaseRoute
 
+from app.auth import controller as authController
 from app.middleware.auth import AuthMiddleware
 from app.middleware.process_time import ProcessTimeMiddleware
 from app.module import controller as moduleController
@@ -156,11 +157,13 @@ app.add_middleware(
 )
 app.add_middleware(ProcessTimeMiddleware)
 
+app.include_router(authController.router)
 app.include_router(authorController.router)
 app.include_router(bookController.router)
 app.include_router(genreController.router)
 app.include_router(bookGenreController.router)
 app.include_router(bookAuthorController.router)
+app.include_router(bookAuthorController.author_router)
 app.include_router(userController.router)
 app.include_router(roleController.router)
 app.include_router(privilegeController.router)
@@ -169,7 +172,8 @@ app.include_router(bookRatingController.router)
 app.include_router(businessController.router)
 app.include_router(businessBookController.router)
 app.include_router(businessUserController.router)
-app.include_router(businessRatingController.router)
+app.include_router(businessRatingController.customer_router)
+app.include_router(businessRatingController.business_router)
 app.include_router(variantController.router)
 app.include_router(orderController.router)
 app.include_router(orderItemController.router)

@@ -20,7 +20,6 @@ class OrderItem(BaseAppModel):
 
 
 class OrderItemCreateRequest(BaseModel):
-    order_id: str
     variant_id: str
     quantity: int
     unit_price: float
@@ -29,7 +28,6 @@ class OrderItemCreateRequest(BaseModel):
 
 
 class OrderItemUpdateRequest(BaseModel):
-    order_id: str | None = None
     variant_id: str | None = None
     quantity: Optional[int] = None
     unit_price: Optional[float] = None

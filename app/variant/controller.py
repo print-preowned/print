@@ -1,58 +1,51 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth.privilege_catalog import Privilege
-from app.utility.authorization import TokenPayload, require_context, require_privilege
+from app.utility.authorization import TokenPayload, get_token_payload
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant.schemas import PublicCatalogVariantRead, VariantRead
 from app.variant.service import ReadableVariantService
 
-router = APIRouter(prefix="/variants", tags=["VariantController"])
+router = APIRouter(prefix="/variants", tags=["variants"])
 
 
-@router.get("/audit/read", tags=["platform"])
+def _assert_platform_read_variant(token: TokenPayload) -> None:
+    if token.ctx != "PLATFORM":
+        raise HTTPException(status_code=403, detail="PLATFORM context required")
+    privileges = token.privileges
+    if (
+        Privilege.READ_VARIANT not in privileges
+        and "MANAGE_VARIANTS" not in privileges
+    ):
+        raise HTTPException(status_code=403, detail="User unauthorized to access this resource")
+
+
+@router.get("")
 async def read(
     page: int = 1,
     size: int = 5,
     search: str | None = None,
-    token: TokenPayload = Depends(require_context("PLATFORM")),
-    _: TokenPayload = Depends(require_privilege(Privilege.READ_VARIANT)),
+    token: TokenPayload = Depends(get_token_payload),
     service: ReadableVariantService = Depends(),
-) -> PaginatedResponse[VariantRead]:
-    """Platform read-only audit view across all variants.
-
-    Sellers use business-book scoped routes.
-    """
+) -> PaginatedResponse[VariantRead] | PaginatedResponse[PublicCatalogVariantRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    if token.ctx == "CUSTOMER":
+        return await service.read_public_catalog(param)
+    if token.ctx == "PLATFORM":
+        _assert_platform_read_variant(token)
+        return await service.read(param)
+    raise HTTPException(status_code=403, detail="Unsupported context for variant catalog")
 
 
-@router.get("/audit/read/by-id/{id}", tags=["platform"])
+@router.get("/{id}")
 async def read_by_id(
     id: str,
-    token: TokenPayload = Depends(require_context("PLATFORM")),
-    _: TokenPayload = Depends(require_privilege(Privilege.READ_VARIANT)),
+    token: TokenPayload = Depends(get_token_payload),
     service: ReadableVariantService = Depends(),
-) -> BaseResponse[VariantRead]:
-    """Platform read-only variant detail. Moderation actions belong on business_book listings."""
-    return await service.read_by_id(id)
-
-
-@router.get("/read", tags=["client"])
-async def read_public_catalog(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
-    token: TokenPayload = Depends(require_context("CUSTOMER")),
-    service: ReadableVariantService = Depends(),
-) -> PaginatedResponse[PublicCatalogVariantRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read_public_catalog(param)
-
-
-@router.get("/read/by-id/{id}", tags=["client"])
-async def read_public_catalog_by_id(
-    id: str,
-    token: TokenPayload = Depends(require_context("CUSTOMER")),
-    service: ReadableVariantService = Depends(),
-) -> BaseResponse[PublicCatalogVariantRead]:
-    return await service.read_public_catalog_by_id(id)
+) -> BaseResponse[VariantRead] | BaseResponse[PublicCatalogVariantRead]:
+    if token.ctx == "CUSTOMER":
+        return await service.read_public_catalog_by_id(id)
+    if token.ctx == "PLATFORM":
+        _assert_platform_read_variant(token)
+        return await service.read_by_id(id)
+    raise HTTPException(status_code=403, detail="Unsupported context for variant catalog")

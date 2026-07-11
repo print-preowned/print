@@ -18,22 +18,11 @@ APP_DIR = REPO_ROOT / "app"
 
 PRIVILEGE_RE = re.compile(r'require_privilege(?:_and_owner)?\(\s*["\']([^"\']+)["\']')
 
-# BUSINESS routes still context-only until the method-only REST migration adds privileges.
+# Routes that intentionally use require_context("BUSINESS") without a privilege guard.
 KNOWN_UNGUARDED_BUSINESS_ROUTES: frozenset[str] = frozenset(
     {
-        "POST /business-book/create",
-        "PUT /business-book/update/{id}",
-        "DELETE /business-book/delete/{id}",
-        "GET /business-book/read",
-        "GET /business-book/read/by-id/{id}",
-        "POST /business-book/{business_book_id}/variant",
-        "PUT /business-book/{business_book_id}/variant/{variant_id}",
-        "DELETE /business-book/{business_book_id}/variant/{variant_id}",
-        "GET /business-book/{business_book_id}/variant",
-        "GET /business/read",
-        "GET /business/read/by-id/{id}",
-        "GET /variant-type/read",
-        "GET /variant-option/read",
+        "GET /businesses",
+        "GET /businesses/{id}",
     }
 )
 
@@ -85,9 +74,11 @@ def _collect_business_context_only_routes() -> set[str]:
                     route_path += str(dec.args[0].value)
                 source = ast.get_source_segment(path.read_text(encoding="utf-8"), node) or ""
                 has_context = 'require_context("BUSINESS")' in source
-                has_privilege = "require_privilege" in source
-                has_owner = "require_owner" in source
-                if has_context and not has_privilege and not has_owner:
+                has_privilege = (
+                    "require_privilege" in source
+                    or "require_owner" in source
+                )
+                if has_context and not has_privilege:
                     unguarded.add(_route_key(func.attr, route_path))
     return unguarded
 

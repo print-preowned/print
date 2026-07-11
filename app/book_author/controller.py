@@ -3,75 +3,57 @@ from fastapi import APIRouter, Depends, Response
 from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateRequest
 from app.book_author.schemas import BookAuthorRead
 from app.book_author.service import ReadableBookAuthorService, WritableBookAuthorService
-from app.utility.model import BaseFilter, BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.authorization import TokenPayload, require_privilege
+from app.utility.model import BaseResponse
 
-router = APIRouter(prefix="/book-author", tags=["BookAuthorController"])
+router = APIRouter(prefix="/books/{book_id}/authors", tags=["book-authors"])
+author_router = APIRouter(prefix="/authors/{author_id}/books", tags=["book-authors"])
 
 
-@router.post("/create")
+@router.post("", status_code=201)
 async def create(
+    book_id: str,
     payload: BookAuthorCreateRequest,
+    token: TokenPayload = Depends(require_privilege("CREATE_BOOK_AUTHOR")),
     service: WritableBookAuthorService = Depends(),
 ) -> Response:
-    return await service.create(payload)
+    return await service.create(book_id, payload)
 
 
-@router.put("/update/{id}")
+@router.patch("/{id}")
 async def update(
+    book_id: str,
     id: str,
     payload: BookAuthorUpdateRequest,
+    token: TokenPayload = Depends(require_privilege("UPDATE_BOOK_AUTHOR")),
     service: WritableBookAuthorService = Depends(),
 ) -> Response:
-    return await service.update(id, payload)
+    return await service.update(book_id, id, payload)
 
 
-@router.delete("/delete/{id}")
-async def delete(
-    id: str,
-    service: WritableBookAuthorService = Depends(),
-) -> Response:
-    return await service.delete(id)
-
-
-@router.delete("/delete/by-book/{book_id}/author/{author_id}")
+@router.delete("/{author_id}")
 async def delete_by_book_and_author(
     book_id: str,
     author_id: str,
+    token: TokenPayload = Depends(require_privilege("DELETE_BOOK_AUTHOR")),
     service: WritableBookAuthorService = Depends(),
 ) -> Response:
     return await service.delete_by_book_and_author(book_id, author_id)
 
 
-@router.get("/read")
-async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
-    service: ReadableBookAuthorService = Depends(),
-) -> PaginatedResponse[BookAuthorRead]:
-    param: ParamRequest[BaseFilter] = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
-
-
-@router.get("/read/by-id/{id}")
-async def read_by_id(
-    id: str,
-    service: ReadableBookAuthorService = Depends(),
-) -> BaseResponse[BookAuthorRead]:
-    return await service.read_by_id(id)
-
-
-@router.get("/read/by-book/{book_id}")
+@router.get("")
 async def read_by_book_id(
     book_id: str,
+    token: TokenPayload = Depends(require_privilege("READ_BOOK_AUTHOR")),
     service: ReadableBookAuthorService = Depends(),
 ) -> BaseResponse[list[BookAuthorRead]]:
     return await service.read_by_book_id(book_id)
 
 
-@router.get("/read/by-author/{author_id}")
+@author_router.get("")
 async def read_by_author_id(
     author_id: str,
+    token: TokenPayload = Depends(require_privilege("READ_BOOK_AUTHOR")),
     service: ReadableBookAuthorService = Depends(),
 ) -> BaseResponse[list[BookAuthorRead]]:
     return await service.read_by_author_id(author_id)

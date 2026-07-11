@@ -13,8 +13,8 @@ from app.utility.authorization import TokenPayload, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(
-    prefix="/platform-privilege-set-privilege",
-    tags=["platform-privilege-set-privilege"],
+    prefix="/admin/privilege-set-privileges",
+    tags=["admin-privilege-set-privileges"],
 )
 
 
@@ -84,7 +84,7 @@ async def read_by_id(
     return await service.read_by_id(id)
 
 
-@router.get("/privilege-set/{privilege_set_id}", status_code=200, tags=["platform"])
+@router.get("/by-privilege-set/{privilege_set_id}", status_code=200, tags=["platform"])
 async def read_by_privilege_set_id(
     privilege_set_id: str,
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_PRIVILEGE_SETS")),

@@ -12,7 +12,7 @@ from app.platform_privilege.service import (
 from app.utility.authorization import TokenPayload, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
-router = APIRouter(prefix="/platform-privilege", tags=["platform-privilege"])
+router = APIRouter(prefix="/admin/privileges", tags=["admin-privileges"])
 
 
 @router.post("", status_code=201, tags=["platform"])

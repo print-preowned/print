@@ -3,50 +3,47 @@ from fastapi import APIRouter, Depends, Response
 from app.order.model import OrderCreateRequest, OrderUpdateRequest
 from app.order.schemas import OrderRead
 from app.order.service import ReadableOrderService, WritableOrderService
+from app.utility.authorization import TokenPayload, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
-router = APIRouter(prefix="/order", tags=["OrderController"])
+router = APIRouter(prefix="/orders", tags=["orders"])
 
 
-@router.post("/create")
+@router.post("", status_code=201)
 async def create(
     payload: OrderCreateRequest,
+    token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: WritableOrderService = Depends(),
 ) -> Response:
     return await service.create(payload)
 
 
-@router.put("/update/{id}")
-async def update(
+@router.get("/{id}")
+async def read_by_id(
     id: str,
-    payload: OrderUpdateRequest,
-    service: WritableOrderService = Depends(),
-) -> Response:
-    return await service.update(id, payload)
+    token: TokenPayload = Depends(require_context("CUSTOMER")),
+    service: ReadableOrderService = Depends(),
+) -> BaseResponse[OrderRead]:
+    return await service.read_by_id(id)
 
 
-@router.delete("/delete/{id}")
-async def delete(
-    id: str,
-    service: WritableOrderService = Depends(),
-) -> Response:
-    return await service.delete(id)
-
-
-@router.get("/read")
+@router.get("")
 async def read(
     page: int = 1,
     size: int = 5,
     search: str | None = None,
+    token: TokenPayload = Depends(require_privilege("READ_ORDER")),
     service: ReadableOrderService = Depends(),
 ) -> PaginatedResponse[OrderRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await service.read(param)
 
 
-@router.get("/read/by-id/{id}")
-async def read_by_id(
+@router.patch("/{id}")
+async def update(
     id: str,
-    service: ReadableOrderService = Depends(),
-) -> BaseResponse[OrderRead]:
-    return await service.read_by_id(id)
+    payload: OrderUpdateRequest,
+    token: TokenPayload = Depends(require_privilege("UPDATE_ORDER")),
+    service: WritableOrderService = Depends(),
+) -> Response:
+    return await service.update(id, payload)

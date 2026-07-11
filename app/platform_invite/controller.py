@@ -13,10 +13,10 @@ from app.platform_invite.service import ReadablePlatformInviteService, WritableP
 from app.utility.authorization import TokenPayload, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
-router = APIRouter(prefix="/platform-invite", tags=["platform-invite"])
+router = APIRouter(prefix="/admin/invites", tags=["admin-invites"])
 
 
-@router.post("/create", status_code=201, tags=["platform"])
+@router.post("", status_code=201, tags=["platform"])
 async def create(
     invite: PlatformInviteCreateRequest,
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),

@@ -1,60 +1,61 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.business_user.model import BusinessUserCreateRequest, BusinessUserUpdateRequest
 from app.business_user.schemas import BusinessUserRead
 from app.business_user.service import ReadableBusinessUserService, WritableBusinessUserService
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.authorization import TokenPayload, get_business_id, require_privilege
+from app.utility.model import BaseResponse
 
-router = APIRouter(prefix="/business-user", tags=["BusinessUserController"])
+router = APIRouter(prefix="/business-users", tags=["business-users"])
 
 
-@router.post("/create")
+def _business_id(token: TokenPayload) -> str:
+    business_id = get_business_id(token)
+    if not business_id:
+        raise HTTPException(status_code=403, detail="Business context required")
+    return business_id
+
+
+@router.post("", status_code=201)
 async def create(
     payload: BusinessUserCreateRequest,
+    token: TokenPayload = Depends(require_privilege("CREATE_BUSINESS_USER")),
     service: WritableBusinessUserService = Depends(),
 ) -> Response:
     return await service.create(payload)
 
 
-@router.put("/update/{id}")
+@router.patch("/{id}")
 async def update(
     id: str,
     payload: BusinessUserUpdateRequest,
+    token: TokenPayload = Depends(require_privilege("UPDATE_BUSINESS_USER")),
     service: WritableBusinessUserService = Depends(),
 ) -> Response:
     return await service.update(id, payload)
 
 
-@router.delete("/delete/{id}")
+@router.delete("/{id}")
 async def delete(
     id: str,
+    token: TokenPayload = Depends(require_privilege("DELETE_BUSINESS_USER")),
     service: WritableBusinessUserService = Depends(),
 ) -> Response:
     return await service.delete(id)
 
 
-@router.get("/read")
-async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+@router.get("")
+async def read_by_business_id(
+    token: TokenPayload = Depends(require_privilege("READ_BUSINESS_USER")),
     service: ReadableBusinessUserService = Depends(),
-) -> PaginatedResponse[BusinessUserRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+) -> BaseResponse[list[BusinessUserRead]]:
+    return await service.read_by_business_id(_business_id(token))
 
 
-@router.get("/read/by-id/{id}")
+@router.get("/{id}")
 async def read_by_id(
     id: str,
+    token: TokenPayload = Depends(require_privilege("READ_BUSINESS_USER")),
     service: ReadableBusinessUserService = Depends(),
 ) -> BaseResponse[BusinessUserRead]:
     return await service.read_by_id(id)
-
-
-@router.get("/read/by-business/{business_id}")
-async def read_by_business_id(
-    business_id: str,
-    service: ReadableBusinessUserService = Depends(),
-) -> BaseResponse[list[BusinessUserRead]]:
-    return await service.read_by_business_id(business_id)

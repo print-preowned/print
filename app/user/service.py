@@ -210,6 +210,107 @@ class UserService:
             raise HTTPException(status_code=404, detail="User not found")
         return BaseResponse[UserRead](status_code=200, message="Successful", data=_to_read(row))
 
+    async def switch_to_business(
+        self,
+        token_payload: TokenPayload,
+        business_id: str,
+    ) -> ContextSwitchResponse:
+        if (
+            token_payload.ctx == "BUSINESS"
+            and token_payload.business
+            and token_payload.business.get("id") == business_id
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="You are already in BUSINESS context for this business",
+            )
+
+        user_id = token_payload.sub
+        parsed_user_id = _parse_user_id(user_id)
+        parsed_business_id = uuid.UUID(business_id)
+
+        row = await self._repo.read_user_by_id(parsed_user_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = _to_read(row)
+
+        membership = await self._business_user_repo.read_business_user_by_user_id(parsed_user_id)
+        if not membership or membership.business_id != parsed_business_id:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not a member of this business",
+            )
+
+        business = await self._business_repo.read_by_id(parsed_business_id)
+        if not business:
+            raise HTTPException(status_code=404, detail="Business not found")
+
+        is_owner = str(business.user_id) == user_id
+        is_system_role = False
+
+        if is_owner:
+            owner_role = await self._role_repo.read_role_by_code(OWNER_ROLE_CODE)
+            if owner_role is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Owner role is not configured.",
+                )
+            role_id = str(owner_role.id)
+            role_name = owner_role.name
+            privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
+                owner_role.id
+            )
+        else:
+            role_id = str(membership.role_id)
+            role_record = await self._role_repo.read_role_by_id(membership.role_id)
+            privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
+                membership.role_id
+            )
+            role_name = role_record.name if role_record else "Member"
+
+        token = create_business_token(
+            user_id,
+            business_id,
+            role_id,
+            role_name,
+            is_system_role,
+            is_owner,
+            privileges,
+        )
+        set_key(user.email, token, 60 * 60 * 24)
+
+        return ContextSwitchResponse(
+            status_code=200,
+            message="Context switched to BUSINESS",
+            token=token,
+        )
+
+    async def switch_to_customer(self, token_payload: TokenPayload) -> ContextSwitchResponse:
+        if token_payload.ctx == "CUSTOMER":
+            raise HTTPException(
+                status_code=400,
+                detail="You are already in CUSTOMER context",
+            )
+
+        user_id = token_payload.sub
+        parsed_user_id = _parse_user_id(user_id)
+
+        row = await self._repo.read_user_by_id(parsed_user_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = _to_read(row)
+
+        membership = await self._business_user_repo.read_business_user_by_user_id(parsed_user_id)
+        has_business = membership is not None
+        token = create_customer_token(user, has_business=has_business)
+        set_key(user.email, token, 60 * 60 * 24)
+
+        return ContextSwitchResponse(
+            status_code=200,
+            message="Context switched to CUSTOMER",
+            token=token,
+        )
+
     async def switch_context(
         self,
         token_payload: TokenPayload,
@@ -221,79 +322,18 @@ class UserService:
                 detail="Invalid target context. Must be 'CUSTOMER', 'BUSINESS'",
             )
 
-        if token_payload.ctx == target_context:
-            raise HTTPException(
-                status_code=400,
-                detail=f"You are already in {target_context} context",
-            )
+        if target_context == "CUSTOMER":
+            return await self.switch_to_customer(token_payload)
 
-        user_id = token_payload.sub
-        parsed_user_id = _parse_user_id(user_id)
-
-        row = await self._repo.read_user_by_id(parsed_user_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        user = _to_read(row)
-
-        if target_context == "BUSINESS":
-            membership = await self._business_user_repo.read_business_user_by_user_id(
-                parsed_user_id
-            )
-            if not membership:
-                raise HTTPException(
-                    status_code=404,
-                    detail="You don't have a business. Please create one first.",
-                )
-
-            business = await self._business_repo.read_by_id(membership.business_id)
-            if not business:
-                raise HTTPException(status_code=404, detail="Business not found")
-
-            business_id = str(business.id)
-            is_owner = str(business.user_id) == user_id
-            is_system_role = False
-
-            if is_owner:
-                owner_role = await self._role_repo.read_role_by_code(OWNER_ROLE_CODE)
-                if owner_role is None:
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Owner role is not configured.",
-                    )
-                role_id = str(owner_role.id)
-                role_name = owner_role.name
-                privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
-                    owner_role.id
-                )
-            else:
-                role_id = str(membership.role_id)
-                role_record = await self._role_repo.read_role_by_id(membership.role_id)
-                privileges = await self._role_privilege_repo.read_privilege_codes_by_role_id(
-                    membership.role_id
-                )
-                role_name = role_record.name if role_record else "Member"
-
-            token = create_business_token(
-                user_id,
-                business_id,
-                role_id,
-                role_name,
-                is_system_role,
-                is_owner,
-                privileges,
-            )
-            message = "Context switched to BUSINESS"
-        else:
-            token = create_customer_token(user, has_business=True)
-            message = "Context switched to CUSTOMER"
-
-        set_key(user.email, token, 60 * 60 * 24)
-
-        return ContextSwitchResponse(
-            status_code=200,
-            message=message,
-            token=token,
+        membership = await self._business_user_repo.read_business_user_by_user_id(
+            _parse_user_id(token_payload.sub)
         )
+        if not membership:
+            raise HTTPException(
+                status_code=404,
+                detail="You don't have a business. Please create one first.",
+            )
+        return await self.switch_to_business(token_payload, str(membership.business_id))
 
 
 class WritableUserService(writable_service(UserService)):
