@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.role.model import OWNER_ROLE_CODE, RoleCreateRequest, RoleUpdateRequest
 from app.role.repository import RoleRepository
 from app.role.schemas import RoleCreate, RoleRead, RoleUpdate
+from app.role_privilege.model import RolePrivilegeCreateRequest
+from app.role_privilege.service import RolePrivilegeService
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
 
@@ -32,10 +34,20 @@ class RoleService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = RoleRepository(session)
+        self._role_privilege_service = RolePrivilegeService(session)
 
-    async def create(self, role: RoleCreateRequest) -> Response:
-        await self._repo.create_role(_to_create(role))
-        return Response(status_code=201)
+    async def create(self, role: RoleCreateRequest) -> BaseResponse[RoleRead]:
+        created = await self._repo.create_role(_to_create(role))
+        if role.privilege_codes:
+            await self._role_privilege_service.create(
+                str(created.id),
+                RolePrivilegeCreateRequest(privilege_codes=role.privilege_codes),
+            )
+        return BaseResponse[RoleRead](
+            status_code=201,
+            message="Created",
+            data=_to_read(created),
+        )
 
     async def update(self, id: str, role: RoleUpdateRequest) -> Response:
         parsed_id = _parse_id(id)

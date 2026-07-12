@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RolePrivilege(BaseModel):
@@ -12,6 +12,6 @@ class RolePrivilege(BaseModel):
     updated_at: datetime
 
 
+
 class RolePrivilegeCreateRequest(BaseModel):
-    role_id: str
-    privilege_code: str
+    privilege_codes: list[str] = Field(default_factory=list)

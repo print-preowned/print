@@ -20,7 +20,7 @@ class RolePrivilegeRepository:
         await self._session.flush()
         return mapping
 
-    async def soft_delete_role_privilege(self, mapping_id: uuid.UUID) -> bool:
+    async def delete_role_privilege(self, mapping_id: uuid.UUID) -> bool:
         deleted_id = await self._session.scalar(
             update(RolePrivilegeOrm)
             .where(RolePrivilegeOrm.id == mapping_id, RolePrivilegeOrm.deleted_at.is_(None))
@@ -29,7 +29,7 @@ class RolePrivilegeRepository:
         )
         return deleted_id is not None
 
-    async def soft_delete_by_role_and_code(self, role_id: uuid.UUID, privilege_code: str) -> bool:
+    async def delete_by_role_and_code(self, role_id: uuid.UUID, privilege_code: str) -> bool:
         deleted_id = await self._session.scalar(
             update(RolePrivilegeOrm)
             .where(
@@ -66,6 +66,17 @@ class RolePrivilegeRepository:
                 RolePrivilegeOrm.privilege_code == privilege_code,
                 RolePrivilegeOrm.deleted_at.is_(None),
             )
+        )
+        return list(result)
+
+    async def read_by_role_id(self, role_id: uuid.UUID) -> list[RolePrivilegeOrm]:
+        result = await self._session.scalars(
+            select(RolePrivilegeOrm)
+            .where(
+                RolePrivilegeOrm.role_id == role_id,
+                RolePrivilegeOrm.deleted_at.is_(None),
+            )
+            .order_by(RolePrivilegeOrm.created_at.desc())
         )
         return list(result)
 

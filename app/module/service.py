@@ -1,23 +1,17 @@
 from __future__ import annotations
 
-import uuid
-
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.privilege_catalog import CrudResourceDef, crud_privilege_defs
-from app.business_user.repository import BusinessUserRepository
 from app.module.model import ModuleCreateRequest, ModuleDeleteRequest, ModuleUpdateRequest
 from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
 from app.privilege.repository import PrivilegeRepository
 from app.privilege.schemas import PrivilegeCreate, PrivilegeUpdate
 from app.role.service import RoleService
 from app.role_privilege.model import RolePrivilegeCreateRequest
-from app.role_privilege.repository import RolePrivilegeRepository
-from app.role_privilege.schemas import RolePrivilegeCreate
-from app.user.repository import UserRepository
+from app.role_privilege.service import RolePrivilegeService
 from app.utility.model import BaseResponse
-from app.utility.revocation import revoke_role_active_sessions
 from app.utility.service_deps import writable_service
 
 
@@ -25,9 +19,7 @@ class ModuleService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._privilege_repo = PrivilegeRepository(session)
-        self._role_privilege_repo = RolePrivilegeRepository(session)
-        self._business_user_repo = BusinessUserRepository(session)
-        self._user_repo = UserRepository(session)
+        self._role_privilege_service = RolePrivilegeService(session)
 
     async def create_module(self, request: ModuleCreateRequest) -> Response:
         module_name = request.module_name
@@ -41,7 +33,7 @@ class ModuleService:
                 detail="Owner role not found. Please ensure standard roles are created.",
             )
 
-        owner_role_id = owner_role.id
+        owner_role_id = str(owner_role.id)
 
         resource = CrudResourceDef(
             resource=module_name.upper(),
@@ -55,24 +47,10 @@ class ModuleService:
 
             existing = await self._privilege_repo.read_privilege_by_code(privilege_code)
             if existing:
-                role_id_str = str(owner_role_id)
-                existing_mapping = (
-                    await self._role_privilege_repo.read_role_privilege_by_role_and_code(
-                        uuid.UUID(role_id_str),
-                        privilege_code,
-                    )
+                await self._role_privilege_service.create(
+                    owner_role_id,
+                    RolePrivilegeCreateRequest(privilege_codes=[privilege_code]),
                 )
-                if not existing_mapping:
-                    mapping = RolePrivilegeCreateRequest(
-                        role_id=str(owner_role_id),
-                        privilege_code=privilege_code,
-                    )
-                    await self._role_privilege_repo.create_role_privilege(
-                        RolePrivilegeCreate(
-                            role_id=uuid.UUID(mapping.role_id),
-                            privilege_code=mapping.privilege_code,
-                        )
-                    )
                 continue
 
             privilege_data = PrivilegeCreateRequest(
@@ -88,15 +66,9 @@ class ModuleService:
                 )
             )
 
-            mapping = RolePrivilegeCreateRequest(
-                role_id=str(owner_role_id),
-                privilege_code=privilege_code,
-            )
-            await self._role_privilege_repo.create_role_privilege(
-                RolePrivilegeCreate(
-                    role_id=uuid.UUID(mapping.role_id),
-                    privilege_code=mapping.privilege_code,
-                )
+            await self._role_privilege_service.create(
+                owner_role_id,
+                RolePrivilegeCreateRequest(privilege_codes=[privilege_code]),
             )
 
         return Response(status_code=201)
@@ -113,8 +85,7 @@ class ModuleService:
                 detail="Owner role not found. Please ensure standard roles are created.",
             )
 
-        owner_role_id = owner_role.id
-        owner_role_id_str = str(owner_role_id)
+        owner_role_id = str(owner_role.id)
 
         privileges = await self._privilege_repo.read_privileges_by_module_name(module_name)
 
@@ -140,21 +111,10 @@ class ModuleService:
                     detail=f"Failed to update privilege: {privilege.code}",
                 )
 
-            existing_mapping = await self._role_privilege_repo.read_role_privilege_by_role_and_code(
-                uuid.UUID(owner_role_id_str),
-                privilege.code,
+            await self._role_privilege_service.create(
+                owner_role_id,
+                RolePrivilegeCreateRequest(privilege_codes=[privilege.code]),
             )
-            if not existing_mapping:
-                mapping = RolePrivilegeCreateRequest(
-                    role_id=str(owner_role_id),
-                    privilege_code=privilege.code,
-                )
-                await self._role_privilege_repo.create_role_privilege(
-                    RolePrivilegeCreate(
-                        role_id=uuid.UUID(mapping.role_id),
-                        privilege_code=mapping.privilege_code,
-                    )
-                )
 
         return Response(status_code=200)
 
@@ -169,25 +129,20 @@ class ModuleService:
                 detail=f"No privileges found for module: {module_name}",
             )
 
-        affected_role_ids: set[uuid.UUID] = set()
         for privilege in privileges:
             privilege_code = privilege.code
 
-            role_privileges = await self._role_privilege_repo.read_by_privilege_code(privilege_code)
+            role_privileges_response = await self._role_privilege_service.read_by_privilege_code(
+                privilege_code
+            )
 
-            for role_priv in role_privileges:
-                affected_role_ids.add(role_priv.role_id)
-                await self._role_privilege_repo.soft_delete_by_role_and_code(
-                    role_priv.role_id,
+            for role_priv in role_privileges_response.data:
+                await self._role_privilege_service.delete_by_role_and_code(
+                    str(role_priv.role_id),
                     privilege_code,
                 )
 
             await self._privilege_repo.soft_delete_privilege_by_code(privilege_code)
-
-        for role_id in affected_role_ids:
-            await revoke_role_active_sessions(
-                self._business_user_repo, self._user_repo, role_id
-            )
 
         return Response(status_code=204)
 

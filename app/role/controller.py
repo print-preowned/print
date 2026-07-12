@@ -14,7 +14,7 @@ async def create(
     payload: RoleCreateRequest,
     token: TokenPayload = Depends(require_privilege("CREATE_ROLE")),
     service: WritableRoleService = Depends(),
-) -> Response:
+) -> BaseResponse[RoleRead]:
     return await service.create(payload)
 
 

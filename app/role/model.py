@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # Role code constants
 OWNER_ROLE_CODE = "OWNER"
@@ -21,7 +21,7 @@ class RoleCreateRequest(BaseModel):
     name: str
     code: Optional[str] = None
     description: Optional[str] = None
-    status: str = "ACTIVE"
+    privilege_codes: list[str] = Field(default_factory=list)
 
 
 class RoleUpdateRequest(BaseModel):
