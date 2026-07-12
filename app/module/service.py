@@ -6,6 +6,7 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.privilege_catalog import CrudResourceDef, crud_privilege_defs
+from app.business_user.repository import BusinessUserRepository
 from app.module.model import ModuleCreateRequest, ModuleDeleteRequest, ModuleUpdateRequest
 from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
 from app.privilege.repository import PrivilegeRepository
@@ -14,7 +15,9 @@ from app.role.service import RoleService
 from app.role_privilege.model import RolePrivilegeCreateRequest
 from app.role_privilege.repository import RolePrivilegeRepository
 from app.role_privilege.schemas import RolePrivilegeCreate
+from app.user.repository import UserRepository
 from app.utility.model import BaseResponse
+from app.utility.revocation import revoke_role_active_sessions
 from app.utility.service_deps import writable_service
 
 
@@ -23,6 +26,8 @@ class ModuleService:
         self._session = session
         self._privilege_repo = PrivilegeRepository(session)
         self._role_privilege_repo = RolePrivilegeRepository(session)
+        self._business_user_repo = BusinessUserRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def create_module(self, request: ModuleCreateRequest) -> Response:
         module_name = request.module_name
@@ -164,18 +169,25 @@ class ModuleService:
                 detail=f"No privileges found for module: {module_name}",
             )
 
+        affected_role_ids: set[uuid.UUID] = set()
         for privilege in privileges:
             privilege_code = privilege.code
 
             role_privileges = await self._role_privilege_repo.read_by_privilege_code(privilege_code)
 
             for role_priv in role_privileges:
+                affected_role_ids.add(role_priv.role_id)
                 await self._role_privilege_repo.soft_delete_by_role_and_code(
                     role_priv.role_id,
                     privilege_code,
                 )
 
             await self._privilege_repo.soft_delete_privilege_by_code(privilege_code)
+
+        for role_id in affected_role_ids:
+            await revoke_role_active_sessions(
+                self._business_user_repo, self._user_repo, role_id
+            )
 
         return Response(status_code=204)
 

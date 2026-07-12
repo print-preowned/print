@@ -7,7 +7,7 @@ from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.role_privilege.orm import RolePrivilegeOrm
-from app.role_privilege.schemas import RolePrivilegeCreate, RolePrivilegeUpdate
+from app.role_privilege.schemas import RolePrivilegeCreate
 
 
 class RolePrivilegeRepository:
@@ -19,17 +19,6 @@ class RolePrivilegeRepository:
         self._session.add(mapping)
         await self._session.flush()
         return mapping
-
-    async def update_role_privilege(
-        self, mapping_id: uuid.UUID, payload: RolePrivilegeUpdate
-    ) -> RolePrivilegeOrm | None:
-        row = await self.read_role_privilege_by_id(mapping_id)
-        if row is None:
-            return None
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            setattr(row, field, value)
-        await self._session.flush()
-        return row
 
     async def soft_delete_role_privilege(self, mapping_id: uuid.UUID) -> bool:
         deleted_id = await self._session.scalar(

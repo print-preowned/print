@@ -11,14 +11,6 @@ class RolePrivilegeCreate(BaseModel):
     privilege_code: str
 
 
-class RolePrivilegeUpdate(BaseModel):
-    role_id: uuid.UUID | None = None
-    privilege_code: str | None = None
-    status: str | None = None
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class RolePrivilegeRead(BaseModel):
     id: uuid.UUID
     role_id: uuid.UUID

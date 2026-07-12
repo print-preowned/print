@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Response
 
-from app.role_privilege.model import RolePrivilegeCreateRequest, RolePrivilegeUpdateRequest
+from app.role_privilege.model import RolePrivilegeCreateRequest
 from app.role_privilege.schemas import RolePrivilegeRead
 from app.role_privilege.service import ReadableRolePrivilegeService, WritableRolePrivilegeService
 from app.utility.authorization import TokenPayload, require_privilege
@@ -17,17 +17,6 @@ async def create(
     service: WritableRolePrivilegeService = Depends(),
 ) -> Response:
     return await service.create(payload)
-
-
-@router.patch("/{id}")
-async def update(
-    role_id: str,
-    id: str,
-    payload: RolePrivilegeUpdateRequest,
-    token: TokenPayload = Depends(require_privilege("UPDATE_ROLE_PRIVILEGE")),
-    service: WritableRolePrivilegeService = Depends(),
-) -> Response:
-    return await service.update(id, payload)
 
 
 @router.delete("/{id}")

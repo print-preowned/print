@@ -44,3 +44,14 @@ async def revoke_user_active_session(user_repo: UserRepository, user_id: uuid.UU
     stored = _redis_value_to_str(get_key(row.email))
     if stored:
         revoke_token_string(stored)
+
+
+async def revoke_role_active_sessions(
+    business_user_repo,
+    user_repo: UserRepository,
+    role_id: uuid.UUID,
+) -> None:
+    """Revoke active sessions for every member assigned to role_id (MDC-REVOKE-1)."""
+    user_ids = await business_user_repo.read_user_ids_by_role_id(role_id)
+    for user_id in user_ids:
+        await revoke_user_active_session(user_repo, user_id)

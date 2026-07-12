@@ -76,6 +76,15 @@ class BusinessUserRepository:
         )
         return list(result)
 
+    async def read_user_ids_by_role_id(self, role_id: uuid.UUID) -> list[uuid.UUID]:
+        result = await self._session.scalars(
+            select(BusinessUserOrm.user_id).where(
+                BusinessUserOrm.role_id == role_id,
+                BusinessUserOrm.deleted_at.is_(None),
+            )
+        )
+        return list(result)
+
     async def count_business_users(self) -> int:
         total = await self._session.scalar(
             select(func.count())

@@ -33,6 +33,7 @@ class CrudResourceDef:
     resource: str
     module: str
     include_delete: bool = True
+    include_update: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +68,7 @@ BUSINESS_CRUD_RESOURCES: Final[tuple[CrudResourceDef, ...]] = (
     CrudResourceDef("USER", "USER"),
     CrudResourceDef("ROLE", "ROLE"),
     CrudResourceDef("PRIVILEGE", "PRIVILEGE"),
-    CrudResourceDef("ROLE_PRIVILEGE", "ROLE_PRIVILEGE"),
+    CrudResourceDef("ROLE_PRIVILEGE", "ROLE_PRIVILEGE", include_update=False),
     CrudResourceDef("VARIANT", "VARIANT"),
     CrudResourceDef("VARIANT_TYPE", "VARIANT_TYPE"),
     CrudResourceDef("VARIANT_OPTION", "VARIANT_OPTION"),
@@ -142,12 +143,15 @@ DEPRECATED_PRIVILEGE_CODES: Final[frozenset[str]] = frozenset(
         "CREATE_INVENTORY",
         "UPDATE_INVENTORY",
         "DELETE_INVENTORY",
+        "UPDATE_ROLE_PRIVILEGE",
     }
 )
 
 
 def crud_privilege_defs(resource: CrudResourceDef) -> list[PrivilegeDef]:
     operations = list(CRUD_OPERATIONS)
+    if not resource.include_update:
+        operations.remove("UPDATE")
     if not resource.include_delete:
         operations.remove("DELETE")
     return [
