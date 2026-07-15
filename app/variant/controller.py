@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth.privilege_catalog import Privilege
-from app.utility.authorization import TokenPayload, get_token_payload
+from app.utility.authorization import (
+    TokenPayload,
+    get_optional_token_payload,
+)
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 from app.variant.schemas import PublicCatalogVariantRead, VariantRead
 from app.variant.service import ReadableVariantService
@@ -25,12 +28,13 @@ async def read(
     page: int = 1,
     size: int = 5,
     search: str | None = None,
-    token: TokenPayload = Depends(get_token_payload),
+    book_id: str | None = None,
+    token: TokenPayload | None = Depends(get_optional_token_payload),
     service: ReadableVariantService = Depends(),
 ) -> PaginatedResponse[VariantRead] | PaginatedResponse[PublicCatalogVariantRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    if token.ctx == "CUSTOMER":
-        return await service.read_public_catalog(param)
+    if token is None or token.ctx in ("CUSTOMER", "BUSINESS"):
+        return await service.read_public_catalog(param, book_id=book_id)
     if token.ctx == "PLATFORM":
         _assert_platform_read_variant(token)
         return await service.read(param)
@@ -40,10 +44,10 @@ async def read(
 @router.get("/{id}")
 async def read_by_id(
     id: str,
-    token: TokenPayload = Depends(get_token_payload),
+    token: TokenPayload | None = Depends(get_optional_token_payload),
     service: ReadableVariantService = Depends(),
 ) -> BaseResponse[VariantRead] | BaseResponse[PublicCatalogVariantRead]:
-    if token.ctx == "CUSTOMER":
+    if token is None or token.ctx in ("CUSTOMER", "BUSINESS"):
         return await service.read_public_catalog_by_id(id)
     if token.ctx == "PLATFORM":
         _assert_platform_read_variant(token)

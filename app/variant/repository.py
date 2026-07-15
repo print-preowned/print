@@ -7,6 +7,7 @@ from decimal import Decimal
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.business_book.orm import BusinessBookOrm
 from app.variant.orm import VariantOrm
 from app.variant.schemas import ResolvedConfigRead, VariantCreate, VariantUpdate
 from app.variant_config.repository import VariantConfigRepository
@@ -88,13 +89,26 @@ class VariantRepository:
         )
 
     async def count_variants(
-        self, *, business_book_id: uuid.UUID | None = None, active_catalog_only: bool = False
+        self,
+        *,
+        business_book_id: uuid.UUID | None = None,
+        book_id: uuid.UUID | None = None,
+        active_catalog_only: bool = False,
     ) -> int:
         statement = (
             select(func.count()).select_from(VariantOrm).where(VariantOrm.deleted_at.is_(None))
         )
         if business_book_id is not None:
             statement = statement.where(VariantOrm.business_book_id == business_book_id)
+        if book_id is not None:
+            statement = statement.join(
+                BusinessBookOrm,
+                BusinessBookOrm.id == VariantOrm.business_book_id,
+            ).where(
+                BusinessBookOrm.book_id == book_id,
+                BusinessBookOrm.deleted_at.is_(None),
+                BusinessBookOrm.status == "ACTIVE",
+            )
         if active_catalog_only:
             statement = statement.where(VariantOrm.status == "ACTIVE", VariantOrm.stock > 0)
         total = await self._session.scalar(statement)
@@ -106,6 +120,7 @@ class VariantRepository:
         offset: int,
         limit: int,
         business_book_id: uuid.UUID | None = None,
+        book_id: uuid.UUID | None = None,
         active_catalog_only: bool = False,
     ) -> list[VariantOrm]:
         statement: Select[tuple[VariantOrm]] = (
@@ -117,16 +132,34 @@ class VariantRepository:
         )
         if business_book_id is not None:
             statement = statement.where(VariantOrm.business_book_id == business_book_id)
+        if book_id is not None:
+            statement = statement.join(
+                BusinessBookOrm,
+                BusinessBookOrm.id == VariantOrm.business_book_id,
+            ).where(
+                BusinessBookOrm.book_id == book_id,
+                BusinessBookOrm.deleted_at.is_(None),
+                BusinessBookOrm.status == "ACTIVE",
+            )
         if active_catalog_only:
             statement = statement.where(VariantOrm.status == "ACTIVE", VariantOrm.stock > 0)
         result = await self._session.scalars(statement)
         return list(result)
 
     async def variant_summary_for_business_books(
-        self, business_book_ids: list[uuid.UUID]
+        self,
+        business_book_ids: list[uuid.UUID],
+        *,
+        purchasable_only: bool = False,
     ) -> dict[str, dict[str, int | float | None]]:
         if not business_book_ids:
             return {}
+        where_clauses = [
+            VariantOrm.business_book_id.in_(business_book_ids),
+            VariantOrm.deleted_at.is_(None),
+        ]
+        if purchasable_only:
+            where_clauses.extend([VariantOrm.status == "ACTIVE", VariantOrm.stock > 0])
         rows = await self._session.execute(
             select(
                 VariantOrm.business_book_id,
@@ -134,9 +167,7 @@ class VariantRepository:
                 func.min(VariantOrm.price).label("min_price"),
                 func.sum(VariantOrm.stock).label("total_stock"),
             )
-            .where(
-                VariantOrm.business_book_id.in_(business_book_ids), VariantOrm.deleted_at.is_(None)
-            )
+            .where(*where_clauses)
             .group_by(VariantOrm.business_book_id)
         )
         summaries: dict[str, dict[str, int | float | None]] = {}

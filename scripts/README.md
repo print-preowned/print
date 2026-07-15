@@ -75,10 +75,11 @@ CSV files live in `scripts/seeds/`. Upload genres before books. Re-running `--al
 
 ## seed_smoke_test.py
 
-Creates dev smoke-test accounts and a minimal marketplace slice:
+Creates dev smoke-test accounts and a marketplace slice:
 
 1. **Seller** — customer user with an owned business, ACTIVE business-book listings, and catalog variants
-2. **Customer** — plain customer user (no business)
+2. **Five extra sellers** — Harbor Lane Books, Folio & Co., Pagecraft Collective, Northstar Rare & New, Inkwell Market (each with multiple book listings and variants)
+3. **Customer** — plain customer user (no business)
 
 ```bash
 python scripts/seed_smoke_test.py

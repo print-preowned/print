@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 class OrderCreate(BaseModel):
     user_id: uuid.UUID
     reference: str
-    currency: str
+    currency: str = "NGN"
     total_amount: Decimal
 
 

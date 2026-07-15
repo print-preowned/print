@@ -16,9 +16,7 @@ class Order(BaseModel):
 
 
 class OrderCreateRequest(BaseModel):
-    user_id: str
     reference: str
-    currency: str
     total_amount: float
 
 

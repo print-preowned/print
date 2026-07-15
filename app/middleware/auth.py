@@ -11,6 +11,8 @@ PUBLIC_EXACT_PATHS = (
     "/admin/users/login",
     "/authors",
     "/books",
+    "/variants",
+    "/business-books",
 )
 
 PUBLIC_PATHS_PREFIX = (
@@ -20,6 +22,9 @@ PUBLIC_PATHS_PREFIX = (
     "/admin/invites/validate",
     "/admin/invites/accept",
     "/admin/invites/reject",
+    "/books/",
+    "/variants/",
+    "/business-books/",
 )
 
 

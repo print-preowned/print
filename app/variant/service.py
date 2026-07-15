@@ -211,16 +211,22 @@ class VariantService:
     async def read_public_catalog(
         self,
         params: ParamRequest,
+        book_id: str | None = None,
     ) -> PaginatedResponse[PublicCatalogVariantRead]:
         page = max(1, params.page)
         size = params.size
         offset = (page - 1) * size
+        parsed_book_id = _parse_id(book_id) if book_id else None
 
-        total_results = await self._repo.count_variants(active_catalog_only=True)
+        total_results = await self._repo.count_variants(
+            active_catalog_only=True,
+            book_id=parsed_book_id,
+        )
         rows = await self._repo.list_variants(
             offset=offset,
             limit=size,
             active_catalog_only=True,
+            book_id=parsed_book_id,
         )
         data: list[PublicCatalogVariantRead] = []
         if rows:

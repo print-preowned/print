@@ -14,8 +14,8 @@ async def create(
     payload: OrderCreateRequest,
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: WritableOrderService = Depends(),
-) -> Response:
-    return await service.create(payload)
+) -> BaseResponse[OrderRead]:
+    return await service.create(payload, user_id=token.sub)
 
 
 @router.get("/{id}")
@@ -24,7 +24,7 @@ async def read_by_id(
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: ReadableOrderService = Depends(),
 ) -> BaseResponse[OrderRead]:
-    return await service.read_by_id(id)
+    return await service.read_by_id(id, user_id=token.sub)
 
 
 @router.get("")

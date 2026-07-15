@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.utility.model import BaseAppModel
 from app.variant.model import VariantWithConfig
+from app.variant.schemas import PublicCatalogVariantRead
 
 BusinessBookListingStatus = Literal["DRAFT", "ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"]
 SELLER_MUTABLE_LISTING_STATUSES = frozenset({"DRAFT", "ACTIVE", "INACTIVE"})
@@ -73,3 +74,25 @@ class BusinessBookWithVariants(BusinessBook):
     book_title: Optional[str] = None
     book_image: Optional[str] = None
     variants: list[VariantWithConfig] = []
+
+
+class PublicCatalogBusinessBookRead(BaseModel):
+    """Customer-facing listing card: one seller's offer for a book."""
+
+    id: str
+    book_id: str
+    business_id: str
+    business_name: str
+    book_title: str
+    book_image: Optional[str] = None
+    synopsis: Optional[str] = None
+    image: Optional[str] = None
+    author_names: list[str] = Field(default_factory=list)
+    variant_count: int = 0
+    min_price: Optional[float] = None
+
+
+class PublicCatalogBusinessBookDetail(PublicCatalogBusinessBookRead):
+    """Single listing detail with purchasable variants for that seller only."""
+
+    variants: list[PublicCatalogVariantRead] = Field(default_factory=list)

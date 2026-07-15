@@ -22,11 +22,12 @@ def _to_read(row) -> OrderRead:
     return OrderRead.model_validate(row)
 
 
-def _to_create(payload: OrderCreateRequest) -> OrderCreate:
-    data = payload.model_dump(include=set(OrderCreate.model_fields.keys()))
-    data["user_id"] = _parse_id(str(data["user_id"]))
-    data["total_amount"] = Decimal(str(data["total_amount"]))
-    return OrderCreate.model_validate(data)
+def _to_create(payload: OrderCreateRequest, user_id: str) -> OrderCreate:
+    return OrderCreate(
+        user_id=_parse_id(user_id),
+        reference=payload.reference,
+        total_amount=Decimal(str(payload.total_amount)),
+    )
 
 
 class OrderService:
@@ -34,9 +35,13 @@ class OrderService:
         self._session = session
         self._repo = OrderRepository(session)
 
-    async def create(self, order: OrderCreateRequest) -> Response:
-        await self._repo.create_order(_to_create(order))
-        return Response(status_code=201)
+    async def create(self, order: OrderCreateRequest, user_id: str) -> BaseResponse[OrderRead]:
+        row = await self._repo.create_order(_to_create(order, user_id))
+        return BaseResponse[OrderRead](
+            status_code=201,
+            message="Successful",
+            data=_to_read(row),
+        )
 
     async def update(self, id: str, order: OrderUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
@@ -83,10 +88,12 @@ class OrderService:
             ),
         )
 
-    async def read_by_id(self, id: str) -> BaseResponse[OrderRead]:
+    async def read_by_id(self, id: str, user_id: str | None = None) -> BaseResponse[OrderRead]:
         parsed_id = _parse_id(id)
         row = await self._repo.read_order_by_id(parsed_id)
         if row is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if user_id is not None and str(row.user_id) != user_id:
             raise HTTPException(status_code=404, detail="Order not found")
         return BaseResponse[OrderRead](status_code=200, message="Successful", data=_to_read(row))
 

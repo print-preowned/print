@@ -3,6 +3,7 @@ Seed smoke-test users and business marketplace data.
 
 Creates:
 - Seller user + business (owner) with ACTIVE listings and catalog variants
+- Five additional marketplace sellers, each listing multiple books with variants
 - Customer user (no business) for buyer / context-switch flows
 
 Prerequisites:
@@ -58,6 +59,89 @@ VARIANT_SPECS = (
     {"condition": "New", "format": "Paperback", "price": "14.99", "stock": 20, "sku_suffix": "PB"},
 )
 
+# Extra marketplace shops: each gets its own owner + overlapping book slices.
+EXTRA_MARKETPLACES = (
+    {
+        "email": "harbor@example.com",
+        "password": "changeme",
+        "first_name": "Harbor",
+        "last_name": "Books",
+        "business_name": "Harbor Lane Books",
+        "description": "Coastal indie bookstore with new releases",
+        "book_offset": 0,
+        "listing_count": 5,
+        "sku_prefix": "HARBOR",
+        "variant_specs": (
+            {"condition": "New", "format": "Hardcover", "price": "28.50", "stock": 8, "sku_suffix": "HC"},
+            {"condition": "New", "format": "Paperback", "price": "16.99", "stock": 18, "sku_suffix": "PB"},
+            {"condition": "Like New", "format": "Paperback", "price": "12.50", "stock": 6, "sku_suffix": "LN"},
+        ),
+    },
+    {
+        "email": "folio@example.com",
+        "password": "changeme",
+        "first_name": "Folio",
+        "last_name": "Press",
+        "business_name": "Folio & Co.",
+        "description": "Curated literary fiction and classics",
+        "book_offset": 2,
+        "listing_count": 4,
+        "sku_prefix": "FOLIO",
+        "variant_specs": (
+            {"condition": "New", "format": "Hardcover", "price": "32.00", "stock": 5, "sku_suffix": "HC"},
+            {"condition": "Very Good", "format": "Paperback", "price": "11.99", "stock": 14, "sku_suffix": "VG"},
+        ),
+    },
+    {
+        "email": "pagecraft@example.com",
+        "password": "changeme",
+        "first_name": "Page",
+        "last_name": "Craft",
+        "business_name": "Pagecraft Collective",
+        "description": "Community co-op for genre readers",
+        "book_offset": 4,
+        "listing_count": 6,
+        "sku_prefix": "PAGE",
+        "variant_specs": (
+            {"condition": "New", "format": "Paperback", "price": "15.49", "stock": 22, "sku_suffix": "PB"},
+            {"condition": "Good", "format": "Mass Market", "price": "7.99", "stock": 30, "sku_suffix": "MM"},
+            {"condition": "New", "format": "Hardcover", "price": "26.99", "stock": 9, "sku_suffix": "HC"},
+        ),
+    },
+    {
+        "email": "northstar@example.com",
+        "password": "changeme",
+        "first_name": "North",
+        "last_name": "Star",
+        "business_name": "Northstar Rare & New",
+        "description": "Mix of new printings and gently used stock",
+        "book_offset": 6,
+        "listing_count": 5,
+        "sku_prefix": "NORTH",
+        "variant_specs": (
+            {"condition": "Like New", "format": "Hardcover", "price": "22.00", "stock": 4, "sku_suffix": "HC"},
+            {"condition": "Acceptable", "format": "Paperback", "price": "6.50", "stock": 11, "sku_suffix": "ACC"},
+            {"condition": "New", "format": "Paperback", "price": "13.99", "stock": 16, "sku_suffix": "PB"},
+        ),
+    },
+    {
+        "email": "inkwell@example.com",
+        "password": "changeme",
+        "first_name": "Ink",
+        "last_name": "Well",
+        "business_name": "Inkwell Market",
+        "description": "Everyday bestsellers across formats",
+        "book_offset": 8,
+        "listing_count": 5,
+        "sku_prefix": "INK",
+        "variant_specs": (
+            {"condition": "New", "format": "Hardcover", "price": "29.99", "stock": 10, "sku_suffix": "HC"},
+            {"condition": "New", "format": "Paperback", "price": "17.49", "stock": 25, "sku_suffix": "PB"},
+            {"condition": "Very Good", "format": "Hardcover", "price": "19.99", "stock": 7, "sku_suffix": "VG"},
+        ),
+    },
+)
+
 
 async def ensure_user(
     session,
@@ -86,7 +170,13 @@ async def ensure_user(
     return created.id, True
 
 
-async def ensure_business(session, *, user_id, name: str) -> tuple:
+async def ensure_business(
+    session,
+    *,
+    user_id,
+    name: str,
+    description: str = "Dev smoke-test bookstore",
+) -> tuple:
     existing = await BusinessRepository(session).read_by_user_id(user_id)
     if existing:
         print(f"  - Business already exists: {existing.name} (ID: {existing.id})")
@@ -97,7 +187,7 @@ async def ensure_business(session, *, user_id, name: str) -> tuple:
         raise RuntimeError("OWNER role not found. Run scripts/seed_defaults.py first.")
 
     business = await BusinessRepository(session).create(
-        BusinessCreate(user_id=user_id, name=name, description="Dev smoke-test bookstore"),
+        BusinessCreate(user_id=user_id, name=name, description=description),
     )
     await BusinessUserRepository(session).create_business_user(
         BusinessUserCreate(
@@ -157,7 +247,14 @@ async def ensure_listing(session, *, business_id, book) -> BusinessBookOrm:
     return listing
 
 
-async def ensure_variants(session, *, listing: BusinessBookOrm, book_title: str) -> int:
+async def ensure_variants(
+    session,
+    *,
+    listing: BusinessBookOrm,
+    book_title: str,
+    sku_prefix: str = "SMOKE",
+    variant_specs=VARIANT_SPECS,
+) -> int:
     existing_count = await VariantRepository(session).count_variants(business_book_id=listing.id)
     if existing_count > 0:
         print(f"  - {existing_count} variant(s) already exist for '{book_title}'")
@@ -165,7 +262,7 @@ async def ensure_variants(session, *, listing: BusinessBookOrm, book_title: str)
 
     created = 0
     slug = book_title.upper().replace(" ", "-")[:24]
-    for spec in VARIANT_SPECS:
+    for spec in variant_specs:
         option_ids = await resolve_option_value_ids(session, spec["condition"], spec["format"])
         await VariantRepository(session).create_variant(
             VariantCreate(
@@ -174,7 +271,7 @@ async def ensure_variants(session, *, listing: BusinessBookOrm, book_title: str)
                 stock=spec["stock"],
                 price=Decimal(spec["price"]),
                 currency="USD",
-                sku=f"SMOKE-{slug}-{spec['sku_suffix']}",
+                sku=f"{sku_prefix}-{slug}-{spec['sku_suffix']}",
                 product_option_value_ids=option_ids,
             ),
         )
@@ -183,15 +280,66 @@ async def ensure_variants(session, *, listing: BusinessBookOrm, book_title: str)
     return created
 
 
-async def seed_marketplace(session, business_id) -> None:
-    books = await BookRepository(session).list_books(offset=0, limit=LISTING_COUNT)
+async def seed_marketplace(
+    session,
+    business_id,
+    *,
+    offset: int = 0,
+    listing_count: int = LISTING_COUNT,
+    sku_prefix: str = "SMOKE",
+    variant_specs=VARIANT_SPECS,
+) -> None:
+    books = await BookRepository(session).list_books(offset=offset, limit=listing_count)
     if not books:
         raise RuntimeError("No books in catalog. Run scripts/upload_seeds.py --all first.")
 
-    print(f"\nSeeding up to {LISTING_COUNT} business listings and variants...")
+    print(f"\nSeeding up to {listing_count} business listings and variants (offset={offset})...")
     for book in books:
         listing = await ensure_listing(session, business_id=business_id, book=book)
-        await ensure_variants(session, listing=listing, book_title=book.title)
+        await ensure_variants(
+            session,
+            listing=listing,
+            book_title=book.title,
+            sku_prefix=sku_prefix,
+            variant_specs=variant_specs,
+        )
+
+
+async def seed_extra_marketplace(session, shop: dict) -> dict:
+    print(f"\n--- {shop['business_name']} ---")
+    seller_id, _ = await ensure_user(
+        session,
+        email=shop["email"],
+        password=shop["password"],
+        first_name=shop["first_name"],
+        last_name=shop["last_name"],
+    )
+    business_id, _ = await ensure_business(
+        session,
+        user_id=seller_id,
+        name=shop["business_name"],
+        description=shop["description"],
+    )
+    membership = await BusinessUserRepository(session).read_business_user_by_user_id(seller_id)
+    if membership is None:
+        raise RuntimeError(f"Failed to create business_user membership for {shop['email']}")
+
+    await seed_marketplace(
+        session,
+        business_id,
+        offset=shop["book_offset"],
+        listing_count=shop["listing_count"],
+        sku_prefix=shop["sku_prefix"],
+        variant_specs=shop["variant_specs"],
+    )
+    return {
+        "email": shop["email"],
+        "password": shop["password"],
+        "business_name": shop["business_name"],
+        "user_id": seller_id,
+        "business_id": business_id,
+        "listing_count": shop["listing_count"],
+    }
 
 
 async def main() -> None:
@@ -204,6 +352,7 @@ async def main() -> None:
     print("Seeding Smoke Test Users & Business Flows")
     print("=" * 60)
 
+    extra_shops: list[dict] = []
     async with get_sessionmaker()() as session:
         print("\n1. Seller user")
         seller_id, _ = await ensure_user(
@@ -231,6 +380,11 @@ async def main() -> None:
             raise RuntimeError("Failed to create business_user membership")
 
         await seed_marketplace(session, business_id)
+
+        print("\n4. Extra marketplace businesses")
+        for shop in EXTRA_MARKETPLACES:
+            extra_shops.append(await seed_extra_marketplace(session, shop))
+
         await session.commit()
 
     print("\n" + "=" * 60)
@@ -246,6 +400,12 @@ async def main() -> None:
     print(f"  Email:    {customer_email}")
     print(f"  Password: {customer_password}")
     print(f"  User ID:  {customer_id}")
+    print("\nExtra marketplace sellers:")
+    for shop in extra_shops:
+        print(
+            f"  - {shop['business_name']}: {shop['email']} / {shop['password']} "
+            f"({shop['listing_count']} books)"
+        )
     print("\nSmoke test checklist:")
     print("  1. Login as seller → switch to business context")
     print("  2. View seller inventory / listings")

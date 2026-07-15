@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.book.orm import BookOrm
 from app.business_book.orm import BusinessBookOrm
 from app.business_book.schemas import BusinessBookCreate, BusinessBookUpdate
+from app.variant.orm import VariantOrm
 
 
 class BusinessBookRepository:
@@ -86,5 +88,85 @@ class BusinessBookRepository:
         )
         if business_id is not None:
             statement = statement.where(BusinessBookOrm.business_id == business_id)
+        result = await self._session.scalars(statement)
+        return list(result)
+
+    def _public_catalog_base(
+        self,
+        *,
+        book_id: uuid.UUID | None = None,
+        exclude_id: uuid.UUID | None = None,
+        search: str | None = None,
+    ) -> Select[tuple[BusinessBookOrm]]:
+        statement: Select[tuple[BusinessBookOrm]] = (
+            select(BusinessBookOrm)
+            .join(VariantOrm, VariantOrm.business_book_id == BusinessBookOrm.id)
+            .where(
+                BusinessBookOrm.deleted_at.is_(None),
+                BusinessBookOrm.status == "ACTIVE",
+                VariantOrm.deleted_at.is_(None),
+                VariantOrm.status == "ACTIVE",
+                VariantOrm.stock > 0,
+            )
+        )
+        if book_id is not None:
+            statement = statement.where(BusinessBookOrm.book_id == book_id)
+        if exclude_id is not None:
+            statement = statement.where(BusinessBookOrm.id != exclude_id)
+        if search:
+            statement = statement.join(BookOrm, BookOrm.id == BusinessBookOrm.book_id).where(
+                BookOrm.title.ilike(f"%{search}%"),
+                BookOrm.deleted_at.is_(None),
+            )
+        return statement
+
+    async def count_public_catalog(
+        self,
+        *,
+        book_id: uuid.UUID | None = None,
+        exclude_id: uuid.UUID | None = None,
+        search: str | None = None,
+    ) -> int:
+        statement = select(func.count(func.distinct(BusinessBookOrm.id))).select_from(
+            BusinessBookOrm
+        ).join(
+            VariantOrm, VariantOrm.business_book_id == BusinessBookOrm.id
+        ).where(
+            BusinessBookOrm.deleted_at.is_(None),
+            BusinessBookOrm.status == "ACTIVE",
+            VariantOrm.deleted_at.is_(None),
+            VariantOrm.status == "ACTIVE",
+            VariantOrm.stock > 0,
+        )
+        if book_id is not None:
+            statement = statement.where(BusinessBookOrm.book_id == book_id)
+        if exclude_id is not None:
+            statement = statement.where(BusinessBookOrm.id != exclude_id)
+        if search:
+            statement = statement.join(BookOrm, BookOrm.id == BusinessBookOrm.book_id).where(
+                BookOrm.title.ilike(f"%{search}%"),
+                BookOrm.deleted_at.is_(None),
+            )
+        total = await self._session.scalar(statement)
+        return int(total or 0)
+
+    async def list_public_catalog(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        book_id: uuid.UUID | None = None,
+        exclude_id: uuid.UUID | None = None,
+        search: str | None = None,
+    ) -> list[BusinessBookOrm]:
+        statement = (
+            self._public_catalog_base(
+                book_id=book_id, exclude_id=exclude_id, search=search
+            )
+            .group_by(BusinessBookOrm.id)
+            .order_by(BusinessBookOrm.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
         result = await self._session.scalars(statement)
         return list(result)

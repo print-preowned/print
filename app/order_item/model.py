@@ -23,7 +23,6 @@ class OrderItemCreateRequest(BaseModel):
     variant_id: str
     quantity: int
     unit_price: float
-    currency: str
     discount_applied: float | None = None
 
 

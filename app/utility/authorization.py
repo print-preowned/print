@@ -124,6 +124,14 @@ async def get_token_payload(request: Request) -> TokenPayload:
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 
+async def get_optional_token_payload(request: Request) -> TokenPayload | None:
+    """Return token payload when Authorization is present; otherwise None."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    return await get_token_payload(request)
+
+
 def _extract_manage_privilege(privilege: str) -> str | None:
     """
     Extract MANAGE_<RESOURCE> privilege from a resource privilege.
