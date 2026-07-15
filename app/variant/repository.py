@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import ColumnElement, Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_book.orm import BusinessBookOrm
@@ -19,6 +19,12 @@ def effective_price(price: Decimal, discount: Decimal | None) -> float:
     if discount is None:
         return float(price)
     return float(price * (Decimal(1) - discount / Decimal(100)))
+
+
+def effective_price_decimal(price: Decimal, discount: Decimal | None) -> Decimal:
+    if discount is None:
+        return price.quantize(Decimal("0.01"))
+    return (price * (Decimal(1) - discount / Decimal(100))).quantize(Decimal("0.01"))
 
 
 class VariantRepository:
@@ -88,6 +94,22 @@ class VariantRepository:
             select(VariantOrm).where(VariantOrm.id == variant_id, VariantOrm.deleted_at.is_(None))
         )
 
+    async def deduct_stock(self, variant_id: uuid.UUID, quantity: int) -> bool:
+        if quantity <= 0:
+            return False
+        deducted_id = await self._session.scalar(
+            update(VariantOrm)
+            .where(
+                VariantOrm.id == variant_id,
+                VariantOrm.deleted_at.is_(None),
+                VariantOrm.status == "ACTIVE",
+                VariantOrm.stock >= quantity,
+            )
+            .values(stock=VariantOrm.stock - quantity)
+            .returning(VariantOrm.id)
+        )
+        return deducted_id is not None
+
     async def count_variants(
         self,
         *,
@@ -154,7 +176,7 @@ class VariantRepository:
     ) -> dict[str, dict[str, int | float | None]]:
         if not business_book_ids:
             return {}
-        where_clauses = [
+        where_clauses: list[ColumnElement[bool]] = [
             VariantOrm.business_book_id.in_(business_book_ids),
             VariantOrm.deleted_at.is_(None),
         ]

@@ -7,15 +7,23 @@ from decimal import Decimal
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.business_book.repository import BusinessBookRepository
 from app.order.model import OrderCreateRequest, OrderUpdateRequest
 from app.order_item.model import OrderItemCreateRequest
 from app.order.repository import OrderRepository
-from app.order.schemas import OrderCreate, OrderDetailRead, OrderRead, OrderUpdate
+from app.order.schemas import (
+    DEFAULT_ORDER_CURRENCY,
+    OrderCreate,
+    OrderDetailRead,
+    OrderRead,
+    OrderUpdate,
+)
 from app.order_item.repository import OrderItemRepository
 from app.order_item.schemas import OrderItemRead
 from app.order_item.service import build_order_item_create
 from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
 from app.utility.service_deps import readable_service, writable_service
+from app.variant.repository import VariantRepository, effective_price_decimal
 
 
 def _parse_id(value: str) -> uuid.UUID:
@@ -26,11 +34,14 @@ def _to_read(row) -> OrderRead:
     return OrderRead.model_validate(row)
 
 
-def _to_create(payload: OrderCreateRequest, user_id: str) -> OrderCreate:
+def _to_create(
+    payload: OrderCreateRequest, user_id: str, *, total_amount: Decimal
+) -> OrderCreate:
     return OrderCreate(
         user_id=_parse_id(user_id),
         reference=payload.reference,
-        total_amount=Decimal(str(payload.total_amount)),
+        currency=DEFAULT_ORDER_CURRENCY,
+        total_amount=total_amount,
     )
 
 
@@ -47,6 +58,8 @@ class OrderService:
         self._session = session
         self._repo = OrderRepository(session)
         self._item_repo = OrderItemRepository(session)
+        self._variant_repo = VariantRepository(session)
+        self._business_book_repo = BusinessBookRepository(session)
 
     async def _read_items(self, order_id: uuid.UUID) -> list[OrderItemRead]:
         rows = await self._item_repo.list_order_items_by_order_id(order_id)
@@ -58,12 +71,71 @@ class OrderService:
             raise HTTPException(status_code=404, detail="Order not found")
         return row
 
-    async def _create_items(self, order_id: uuid.UUID, currency: str, lines) -> list:
+    async def _resolve_order_lines(
+        self, items: list[OrderItemCreateRequest]
+    ) -> tuple[list[OrderItemCreateRequest], Decimal]:
+        if not items:
+            raise HTTPException(status_code=422, detail="Order must include at least one item")
+
+        quantities: dict[uuid.UUID, int] = {}
+        for line in items:
+            if line.quantity <= 0:
+                raise HTTPException(status_code=422, detail="Item quantity must be positive")
+            variant_id = _parse_id(line.variant_id)
+            quantities[variant_id] = quantities.get(variant_id, 0) + line.quantity
+
+        resolved: list[OrderItemCreateRequest] = []
+        total = Decimal("0")
+
+        for variant_id, quantity in quantities.items():
+            variant = await self._variant_repo.read_variant_by_id(variant_id)
+            if variant is None or variant.status != "ACTIVE":
+                raise HTTPException(status_code=422, detail="An item is no longer available")
+
+            listing = await self._business_book_repo.read_business_book_by_id(
+                variant.business_book_id
+            )
+            if listing is None or listing.status != "ACTIVE":
+                raise HTTPException(status_code=422, detail="An item is no longer available")
+
+            if variant.currency != DEFAULT_ORDER_CURRENCY:
+                raise HTTPException(status_code=422, detail="An item has mismatching currency")
+
+            if variant.stock < quantity:
+                raise HTTPException(status_code=422, detail="Insufficient stock for an item")
+
+            unit_price = effective_price_decimal(variant.price, variant.discount)
+            discount_applied = (
+                float(variant.discount)
+                if variant.discount is not None
+                else None
+            )
+            resolved.append(
+                OrderItemCreateRequest(
+                    variant_id=str(variant_id),
+                    quantity=quantity,
+                    unit_price=float(unit_price),
+                    discount_applied=discount_applied,
+                )
+            )
+            total += unit_price * quantity
+
+        return resolved, total.quantize(Decimal("0.01"))
+
+    async def _create_items(self, order_id: uuid.UUID, lines: list[OrderItemCreateRequest]) -> list:
         item_rows = []
         for line in lines:
+            deducted = await self._variant_repo.deduct_stock(
+                _parse_id(line.variant_id), line.quantity
+            )
+            if not deducted:
+                raise HTTPException(status_code=422, detail="Insufficient stock for an item")
+
             item_rows.append(
                 await self._item_repo.create_order_item(
-                    build_order_item_create(order_id, line, currency)
+                    build_order_item_create(
+                        order_id, line, DEFAULT_ORDER_CURRENCY
+                    )
                 )
             )
         return item_rows
@@ -71,9 +143,17 @@ class OrderService:
     async def create(
         self, order: OrderCreateRequest, user_id: str
     ) -> BaseResponse[OrderDetailRead]:
-        create_payload = _to_create(order, user_id)
+        resolved_lines, total_amount = await self._resolve_order_lines(order.items)
+        client_total = Decimal(str(order.total_amount)).quantize(Decimal("0.01"))
+        if client_total != total_amount:
+            raise HTTPException(
+                status_code=422,
+                detail="Cart is out of date. Refresh your cart and try again.",
+            )
+
+        create_payload = _to_create(order, user_id, total_amount=total_amount)
         row = await self._repo.create_order(create_payload)
-        item_rows = await self._create_items(row.id, create_payload.currency, order.items)
+        item_rows = await self._create_items(row.id, resolved_lines)
         items = [_to_item_read(item_row) for item_row in item_rows]
         return BaseResponse[OrderDetailRead](
             status_code=201,

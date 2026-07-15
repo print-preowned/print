@@ -8,11 +8,13 @@ from pydantic import BaseModel, ConfigDict
 
 from app.order_item.schemas import OrderItemRead
 
+DEFAULT_ORDER_CURRENCY = "NGN"
+
 
 class OrderCreate(BaseModel):
     user_id: uuid.UUID
     reference: str
-    currency: str = "NGN"
+    currency: str = DEFAULT_ORDER_CURRENCY
     total_amount: Decimal
 
 

@@ -270,7 +270,7 @@ async def ensure_variants(
                 description=f"{spec['format']} — {spec['condition']}",
                 stock=spec["stock"],
                 price=Decimal(spec["price"]),
-                currency="USD",
+                currency="NGN",
                 sku=f"{sku_prefix}-{slug}-{spec['sku_suffix']}",
                 product_option_value_ids=option_ids,
             ),
