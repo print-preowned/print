@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.order_item.model import OrderItemCreateRequest
 
 
 class Order(BaseModel):
@@ -18,6 +20,7 @@ class Order(BaseModel):
 class OrderCreateRequest(BaseModel):
     reference: str
     total_amount: float
+    items: list[OrderItemCreateRequest] = Field(min_length=1)
 
 
 class OrderUpdateRequest(BaseModel):

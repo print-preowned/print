@@ -6,6 +6,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.order_item.schemas import OrderItemRead
+
 
 class OrderCreate(BaseModel):
     user_id: uuid.UUID
@@ -35,3 +37,7 @@ class OrderRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OrderDetailRead(OrderRead):
+    items: list[OrderItemRead]

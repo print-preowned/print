@@ -22,14 +22,20 @@ def _to_read(row) -> OrderItemRead:
     return OrderItemRead.model_validate(row)
 
 
-def _to_create(order_id: str, payload: OrderItemCreateRequest) -> OrderItemCreate:
-    data = payload.model_dump(include=set(OrderItemCreate.model_fields.keys()))
-    data["order_id"] = _parse_id(order_id)
-    data["variant_id"] = _parse_id(str(data["variant_id"]))
-    data["unit_price"] = Decimal(str(data["unit_price"]))
-    if data.get("discount_applied") is not None:
-        data["discount_applied"] = Decimal(str(data["discount_applied"]))
-    return OrderItemCreate.model_validate(data)
+def build_order_item_create(
+    order_id: uuid.UUID,
+    payload: OrderItemCreateRequest,
+    currency: str,
+) -> OrderItemCreate:
+    discount = payload.discount_applied
+    return OrderItemCreate(
+        order_id=order_id,
+        variant_id=_parse_id(payload.variant_id),
+        quantity=payload.quantity,
+        unit_price=Decimal(str(payload.unit_price)),
+        currency=currency,
+        discount_applied=Decimal(str(discount)) if discount is not None else None,
+    )
 
 
 def _assert_belongs_to_order(row, order_id: str) -> None:
@@ -41,10 +47,6 @@ class OrderItemService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = OrderItemRepository(session)
-
-    async def create(self, order_id: str, item: OrderItemCreateRequest) -> Response:
-        await self._repo.create_order_item(_to_create(order_id, item))
-        return Response(status_code=201)
 
     async def update(self, order_id: str, id: str, item: OrderItemUpdateRequest) -> Response:
         parsed_id = _parse_id(id)
@@ -76,7 +78,7 @@ class OrderItemService:
             raise HTTPException(status_code=404, detail="OrderItem not found")
         _assert_belongs_to_order(row, order_id)
 
-        deleted = await self._repo.soft_delete_order_item(parsed_id)
+        deleted = await self._repo.delete_order_item(parsed_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="OrderItem not found")
         return Response(status_code=204)

@@ -9,27 +9,6 @@ from app.utility.model import BaseResponse
 router = APIRouter(prefix="/orders/{order_id}/items", tags=["order-items"])
 
 
-@router.post("", status_code=201)
-async def create(
-    order_id: str,
-    payload: OrderItemCreateRequest,
-    token: TokenPayload = Depends(require_context("CUSTOMER")),
-    service: WritableOrderItemService = Depends(),
-) -> Response:
-    return await service.create(order_id, payload)
-
-
-@router.patch("/{id}")
-async def update(
-    order_id: str,
-    id: str,
-    payload: OrderItemUpdateRequest,
-    token: TokenPayload = Depends(require_context("CUSTOMER")),
-    service: WritableOrderItemService = Depends(),
-) -> Response:
-    return await service.update(order_id, id, payload)
-
-
 @router.delete("/{id}")
 async def delete(
     order_id: str,

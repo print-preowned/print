@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response
 
 from app.order.model import OrderCreateRequest, OrderUpdateRequest
-from app.order.schemas import OrderRead
+from app.order.schemas import OrderDetailRead, OrderRead
 from app.order.service import ReadableOrderService, WritableOrderService
 from app.utility.authorization import TokenPayload, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
@@ -14,7 +14,7 @@ async def create(
     payload: OrderCreateRequest,
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: WritableOrderService = Depends(),
-) -> BaseResponse[OrderRead]:
+) -> BaseResponse[OrderDetailRead]:
     return await service.create(payload, user_id=token.sub)
 
 
@@ -23,7 +23,7 @@ async def read_by_id(
     id: str,
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: ReadableOrderService = Depends(),
-) -> BaseResponse[OrderRead]:
+) -> BaseResponse[OrderDetailRead]:
     return await service.read_by_id(id, user_id=token.sub)
 
 

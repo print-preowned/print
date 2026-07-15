@@ -31,7 +31,7 @@ class OrderItemRepository:
         await self._session.flush()
         return row
 
-    async def soft_delete_order_item(self, item_id: uuid.UUID) -> bool:
+    async def delete_order_item(self, item_id: uuid.UUID) -> bool:
         deleted_id = await self._session.scalar(
             update(OrderItemOrm)
             .where(OrderItemOrm.id == item_id, OrderItemOrm.deleted_at.is_(None))
@@ -46,6 +46,18 @@ class OrderItemRepository:
                 OrderItemOrm.id == item_id, OrderItemOrm.deleted_at.is_(None)
             )
         )
+
+    async def list_order_items_by_order_id(self, order_id: uuid.UUID) -> list[OrderItemOrm]:
+        statement: Select[tuple[OrderItemOrm]] = (
+            select(OrderItemOrm)
+            .where(
+                OrderItemOrm.order_id == order_id,
+                OrderItemOrm.deleted_at.is_(None),
+            )
+            .order_by(OrderItemOrm.created_at.asc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
 
     async def count_order_items(self) -> int:
         total = await self._session.scalar(
