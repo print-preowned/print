@@ -110,6 +110,20 @@ class VariantRepository:
         )
         return deducted_id is not None
 
+    async def restore_stock(self, variant_id: uuid.UUID, quantity: int) -> bool:
+        if quantity <= 0:
+            return False
+        restored_id = await self._session.scalar(
+            update(VariantOrm)
+            .where(
+                VariantOrm.id == variant_id,
+                VariantOrm.deleted_at.is_(None),
+            )
+            .values(stock=VariantOrm.stock + quantity)
+            .returning(VariantOrm.id)
+        )
+        return restored_id is not None
+
     async def count_variants(
         self,
         *,

@@ -12,6 +12,7 @@ from app.order.model import (
     OrderCreateRequest,
     OrderStatusUpdateRequest,
     OrderUpdateRequest,
+    assert_customer_can_cancel_order,
     assert_valid_order_status_transition,
 )
 from app.order_item.model import OrderItemCreateRequest
@@ -169,6 +170,17 @@ class OrderService:
                 )
             )
         return item_rows
+
+    async def _restore_stock_for_order(self, order_id: uuid.UUID) -> None:
+        rows = await self._item_repo.list_order_items_by_order_id(order_id)
+        for item in rows:
+            await self._variant_repo.restore_stock(item.variant_id, item.quantity)
+
+    async def _cancel_order(self, order_id: uuid.UUID) -> None:
+        await self._restore_stock_for_order(order_id)
+        updated = await self._repo.update_order(order_id, OrderUpdate(status="CANCELLED"))
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Order not found")
 
     async def create(
         self, order: OrderCreateRequest, user_id: str
@@ -342,7 +354,7 @@ class OrderService:
 
     async def update_status_for_business(
         self, id: str, business_id: str, payload: OrderStatusUpdateRequest
-    ) -> BaseResponse[BusinessOrderDetailRead]:
+    ) -> Response:
         parsed_id = _parse_id(id)
         parsed_business_id = _parse_id(business_id)
         row = await self._repo.read_order_by_id(parsed_id)
@@ -356,12 +368,25 @@ class OrderService:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        updated = await self._repo.update_order(
-            parsed_id, OrderUpdate(status=payload.status)
-        )
-        if updated is None:
-            raise HTTPException(status_code=404, detail="Order not found")
-        return await self.read_by_id_for_business(id, business_id)
+        if payload.status == "CANCELLED":
+            await self._cancel_order(parsed_id)
+        else:
+            updated = await self._repo.update_order(
+                parsed_id, OrderUpdate(status=payload.status)
+            )
+            if updated is None:
+                raise HTTPException(status_code=404, detail="Order not found")
+        return Response(status_code=204)
+
+    async def cancel_by_customer(self, id: str, user_id: str) -> Response:
+        parsed_id = _parse_id(id)
+        row = await self._get_owned_order(parsed_id, user_id)
+        try:
+            assert_customer_can_cancel_order(row.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        await self._cancel_order(parsed_id)
+        return Response(status_code=204)
 
 
 class WritableOrderService(writable_service(OrderService)):

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.order.model import assert_valid_order_status_transition
+from app.order.model import (
+    assert_customer_can_cancel_order,
+    assert_valid_order_status_transition,
+)
 
 
 class TestOrderStatusTransitions:
@@ -14,6 +17,12 @@ class TestOrderStatusTransitions:
     def test_active_legacy_to_confirmed(self) -> None:
         assert_valid_order_status_transition("ACTIVE", "CONFIRMED")
 
+    def test_placed_to_cancelled(self) -> None:
+        assert_valid_order_status_transition("PLACED", "CANCELLED")
+
+    def test_confirmed_to_cancelled(self) -> None:
+        assert_valid_order_status_transition("CONFIRMED", "CANCELLED")
+
     def test_delivered_is_terminal(self) -> None:
         with pytest.raises(ValueError, match="Cannot transition"):
             assert_valid_order_status_transition("DELIVERED", "SHIPPED")
@@ -21,3 +30,23 @@ class TestOrderStatusTransitions:
     def test_invalid_target_status(self) -> None:
         with pytest.raises(ValueError, match="Invalid order status"):
             assert_valid_order_status_transition("PLACED", "ACTIVE")
+
+
+class TestCustomerOrderCancel:
+    def test_placed_can_cancel(self) -> None:
+        assert_customer_can_cancel_order("PLACED")
+
+    def test_confirmed_can_cancel(self) -> None:
+        assert_customer_can_cancel_order("CONFIRMED")
+
+    def test_shipped_cannot_cancel(self) -> None:
+        with pytest.raises(ValueError, match="cannot be cancelled"):
+            assert_customer_can_cancel_order("SHIPPED")
+
+    def test_delivered_cannot_cancel(self) -> None:
+        with pytest.raises(ValueError, match="cannot be cancelled"):
+            assert_customer_can_cancel_order("DELIVERED")
+
+    def test_already_cancelled(self) -> None:
+        with pytest.raises(ValueError, match="already cancelled"):
+            assert_customer_can_cancel_order("CANCELLED")

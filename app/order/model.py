@@ -54,9 +54,20 @@ SELLER_ORDER_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
 }
 
 
+CUSTOMER_CANCELLABLE_ORDER_STATUSES = frozenset({"PLACED", "CONFIRMED"})
+
+
 def assert_valid_order_status_transition(current: str, target: str) -> None:
     if target not in ORDER_FULFILLMENT_STATUSES:
         raise ValueError(f"Invalid order status: {target}")
     allowed = SELLER_ORDER_STATUS_TRANSITIONS.get(current, frozenset())
     if target not in allowed:
         raise ValueError(f"Cannot transition order from {current} to {target}")
+
+
+def assert_customer_can_cancel_order(current: str) -> None:
+    normalized = current.strip().upper()
+    if normalized == "CANCELLED":
+        raise ValueError("Order is already cancelled")
+    if normalized not in CUSTOMER_CANCELLABLE_ORDER_STATUSES:
+        raise ValueError("Order cannot be cancelled after it has shipped")

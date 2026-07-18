@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.order.model import OrderCreateRequest, OrderStatusUpdateRequest
 from app.order.schemas import BusinessOrderDetailRead, BusinessOrderSummaryRead, OrderDetailRead
@@ -35,6 +35,15 @@ async def read_by_id(
     return await service.read_by_id(id, user_id=token.sub)
 
 
+@router.post("/{id}/cancel", status_code=204)
+async def cancel_by_customer(
+    id: str,
+    token: TokenPayload = Depends(require_context("CUSTOMER")),
+    service: WritableOrderService = Depends(),
+) -> Response:
+    return await service.cancel_by_customer(id, user_id=token.sub)
+
+
 @business_router.get("")
 async def read_for_business(
     page: int = 1,
@@ -56,11 +65,11 @@ async def read_by_id_for_business(
     return await service.read_by_id_for_business(id, _business_id(token))
 
 
-@business_router.patch("/{id}/status")
+@business_router.patch("/{id}/status", status_code=204)
 async def update_status_for_business(
     id: str,
     payload: OrderStatusUpdateRequest,
     token: TokenPayload = Depends(require_privilege("UPDATE_ORDER")),
     service: WritableOrderService = Depends(),
-) -> BaseResponse[BusinessOrderDetailRead]:
+) -> Response:
     return await service.update_status_for_business(id, _business_id(token), payload)
