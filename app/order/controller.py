@@ -1,12 +1,20 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.order.model import OrderCreateRequest, OrderUpdateRequest
-from app.order.schemas import OrderDetailRead, OrderRead
+from app.order.model import OrderCreateRequest, OrderStatusUpdateRequest
+from app.order.schemas import BusinessOrderDetailRead, BusinessOrderSummaryRead, OrderDetailRead
 from app.order.service import ReadableOrderService, WritableOrderService
-from app.utility.authorization import TokenPayload, require_context, require_privilege
+from app.utility.authorization import TokenPayload, get_business_id, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+business_router = APIRouter(prefix="/business-orders", tags=["business-orders"])
+
+
+def _business_id(token: TokenPayload) -> str:
+    business_id = get_business_id(token)
+    if not business_id:
+        raise HTTPException(status_code=403, detail="Business context required")
+    return business_id
 
 
 @router.post("", status_code=201)
@@ -27,23 +35,32 @@ async def read_by_id(
     return await service.read_by_id(id, user_id=token.sub)
 
 
-@router.get("")
-async def read(
+@business_router.get("")
+async def read_for_business(
     page: int = 1,
     size: int = 5,
     search: str | None = None,
     token: TokenPayload = Depends(require_privilege("READ_ORDER")),
     service: ReadableOrderService = Depends(),
-) -> PaginatedResponse[OrderRead]:
+) -> PaginatedResponse[BusinessOrderSummaryRead]:
     param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    return await service.read_for_business(_business_id(token), param)
 
 
-@router.patch("/{id}")
-async def update(
+@business_router.get("/{id}")
+async def read_by_id_for_business(
     id: str,
-    payload: OrderUpdateRequest,
+    token: TokenPayload = Depends(require_privilege("READ_ORDER")),
+    service: ReadableOrderService = Depends(),
+) -> BaseResponse[BusinessOrderDetailRead]:
+    return await service.read_by_id_for_business(id, _business_id(token))
+
+
+@business_router.patch("/{id}/status")
+async def update_status_for_business(
+    id: str,
+    payload: OrderStatusUpdateRequest,
     token: TokenPayload = Depends(require_privilege("UPDATE_ORDER")),
     service: WritableOrderService = Depends(),
-) -> Response:
-    return await service.update(id, payload)
+) -> BaseResponse[BusinessOrderDetailRead]:
+    return await service.update_status_for_business(id, _business_id(token), payload)

@@ -10,12 +10,19 @@ from app.order_item.schemas import OrderItemRead
 
 DEFAULT_ORDER_CURRENCY = "NGN"
 
+ORDER_FULFILLMENT_STATUSES = frozenset(
+    {"PLACED", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"}
+)
+# Legacy rows created before fulfillment statuses used ACTIVE.
+LEGACY_ORDER_STATUS_ALIASES = frozenset({"ACTIVE"})
+
 
 class OrderCreate(BaseModel):
     user_id: uuid.UUID
     reference: str
     currency: str = DEFAULT_ORDER_CURRENCY
     total_amount: Decimal
+    status: str = "PLACED"
 
 
 class OrderUpdate(BaseModel):
@@ -43,3 +50,24 @@ class OrderRead(BaseModel):
 
 class OrderDetailRead(OrderRead):
     items: list[OrderItemRead]
+
+
+class BusinessOrderItemRead(OrderItemRead):
+    book_title: str
+
+
+class BusinessOrderSummaryRead(BaseModel):
+    id: uuid.UUID
+    reference: str
+    currency: str
+    status: str
+    business_total_amount: Decimal
+    item_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BusinessOrderDetailRead(BusinessOrderSummaryRead):
+    items: list[BusinessOrderItemRead]

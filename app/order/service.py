@@ -8,11 +8,19 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_book.repository import BusinessBookRepository
-from app.order.model import OrderCreateRequest, OrderUpdateRequest
+from app.order.model import (
+    OrderCreateRequest,
+    OrderStatusUpdateRequest,
+    OrderUpdateRequest,
+    assert_valid_order_status_transition,
+)
 from app.order_item.model import OrderItemCreateRequest
 from app.order.repository import OrderRepository
 from app.order.schemas import (
     DEFAULT_ORDER_CURRENCY,
+    BusinessOrderDetailRead,
+    BusinessOrderItemRead,
+    BusinessOrderSummaryRead,
     OrderCreate,
     OrderDetailRead,
     OrderRead,
@@ -51,6 +59,28 @@ def _to_item_read(row) -> OrderItemRead:
 
 def _to_detail_read(row, items: list[OrderItemRead]) -> OrderDetailRead:
     return OrderDetailRead(**_to_read(row).model_dump(), items=items)
+
+
+def _to_business_item_read(item_row) -> BusinessOrderItemRead:
+    return BusinessOrderItemRead(
+        **OrderItemRead.model_validate(item_row.item).model_dump(),
+        book_title=item_row.book_title,
+    )
+
+
+def _to_business_summary_read(
+    row, *, business_total_amount: Decimal, item_count: int
+) -> BusinessOrderSummaryRead:
+    return BusinessOrderSummaryRead(
+        id=row.id,
+        reference=row.reference,
+        currency=row.currency,
+        status=row.status,
+        business_total_amount=business_total_amount,
+        item_count=item_count,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 class OrderService:
@@ -219,6 +249,119 @@ class OrderService:
             message="Successful",
             data=_to_detail_read(row, items),
         )
+
+    async def read_for_business(
+        self, business_id: str, params: ParamRequest
+    ) -> PaginatedResponse[BusinessOrderSummaryRead]:
+        parsed_business_id = _parse_id(business_id)
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+        search = (params.search or "").strip() or None
+
+        total_results = await self._repo.count_orders_for_business(
+            parsed_business_id, search=search
+        )
+        rows = await self._repo.list_orders_for_business(
+            parsed_business_id,
+            offset=offset,
+            limit=size,
+            search=search,
+        )
+        totals = await self._repo.business_totals_for_orders(
+            parsed_business_id, [row.id for row in rows]
+        )
+        data: list[BusinessOrderSummaryRead] = []
+        for row in rows:
+            summary = totals.get(row.id, {})
+            raw_total = summary["business_total_amount"] or Decimal("0.00")
+            business_total = (
+                raw_total
+                if isinstance(raw_total, Decimal)
+                else Decimal(str(raw_total)).quantize(Decimal("0.01"))
+            )
+            data.append(
+                _to_business_summary_read(
+                    row,
+                    business_total_amount=business_total,
+                    item_count=int(summary["item_count"] or 0),
+                )
+            )
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[BusinessOrderSummaryRead](
+            status_code=200,
+            message="Successful",
+            data=data,
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
+    async def read_by_id_for_business(
+        self, id: str, business_id: str
+    ) -> BaseResponse[BusinessOrderDetailRead]:
+        parsed_id = _parse_id(id)
+        parsed_business_id = _parse_id(business_id)
+        row = await self._repo.read_order_by_id(parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if not await self._repo.order_belongs_to_business(parsed_id, parsed_business_id):
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        item_rows = await self._repo.list_business_order_items(
+            parsed_id, parsed_business_id
+        )
+        totals = await self._repo.business_totals_for_orders(
+            parsed_business_id, [parsed_id]
+        )
+        summary = totals.get(parsed_id, {})
+        raw_total = summary.get("business_total_amount", Decimal("0.00"))
+        business_total = (
+            raw_total
+            if isinstance(raw_total, Decimal)
+            else Decimal(str(raw_total)).quantize(Decimal("0.01"))
+        )
+        items = [_to_business_item_read(item_row) for item_row in item_rows]
+        detail = BusinessOrderDetailRead(
+            **_to_business_summary_read(
+                row,
+                business_total_amount=business_total,
+                item_count=int(summary.get("item_count") or 0),
+            ).model_dump(),
+            items=items,
+        )
+        return BaseResponse[BusinessOrderDetailRead](
+            status_code=200,
+            message="Successful",
+            data=detail,
+        )
+
+    async def update_status_for_business(
+        self, id: str, business_id: str, payload: OrderStatusUpdateRequest
+    ) -> BaseResponse[BusinessOrderDetailRead]:
+        parsed_id = _parse_id(id)
+        parsed_business_id = _parse_id(business_id)
+        row = await self._repo.read_order_by_id(parsed_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if not await self._repo.order_belongs_to_business(parsed_id, parsed_business_id):
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        try:
+            assert_valid_order_status_transition(row.status, payload.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        updated = await self._repo.update_order(
+            parsed_id, OrderUpdate(status=payload.status)
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        return await self.read_by_id_for_business(id, business_id)
 
 
 class WritableOrderService(writable_service(OrderService)):

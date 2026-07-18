@@ -2,6 +2,8 @@
 Seed smoke-test users and business marketplace data.
 
 Creates:
+- Authors from scripts/seeds/authors.csv (when missing)
+- Book–author links for 80% of catalog books (round-robin across authors)
 - Seller user + business (owner) with ACTIVE listings and catalog variants
 - Five additional marketplace sellers, each listing multiple books with variants
 - Customer user (no business) for buyer / context-switch flows
@@ -25,6 +27,7 @@ Optional env:
 from __future__ import annotations
 
 import asyncio
+import csv
 import os
 import sys
 from decimal import Decimal
@@ -35,7 +38,13 @@ from sqlalchemy import select
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.author.model import AuthorCreateRequest
+from app.author.orm import AuthorOrm
+from app.author.repository import AuthorRepository
+from app.author.schemas import AuthorCreate
 from app.book.repository import BookRepository
+from app.book_author.repository import BookAuthorRepository
+from app.book_author.schemas import BookAuthorCreate
 from app.business.repository import BusinessRepository
 from app.business.schemas import BusinessCreate
 from app.business_book.orm import BusinessBookOrm
@@ -52,6 +61,9 @@ from app.variant.repository import VariantRepository
 from app.variant.schemas import VariantCreate
 from app.variant_option.repository import VariantOptionRepository
 from app.variant_type.repository import VariantTypeRepository
+
+AUTHORS_CSV = Path(__file__).parent / "seeds" / "authors.csv"
+BOOK_AUTHOR_LINK_RATIO = 80
 
 LISTING_COUNT = 3
 VARIANT_SPECS = (
@@ -217,6 +229,112 @@ async def resolve_option_value_ids(session, condition: str, format_value: str) -
     return [condition_value.id, format_row.id]
 
 
+async def find_author_by_name(session, *, first_name: str, last_name: str) -> AuthorOrm | None:
+    return await session.scalar(
+        select(AuthorOrm).where(
+            AuthorOrm.first_name == first_name,
+            AuthorOrm.last_name == last_name,
+            AuthorOrm.deleted_at.is_(None),
+        )
+    )
+
+
+async def ensure_author(
+    session,
+    *,
+    first_name: str,
+    last_name: str,
+    middle_name: str | None,
+    about: str,
+    image: str | None,
+) -> tuple[AuthorOrm, bool]:
+    existing = await find_author_by_name(session, first_name=first_name, last_name=last_name)
+    if existing:
+        print(f"  - Author already exists: {first_name} {last_name}")
+        return existing, False
+
+    request = AuthorCreateRequest(
+        first_name=first_name,
+        last_name=last_name,
+        middle_name=middle_name,
+        about=about,
+        image=image or "",
+        status="ACTIVE",
+    )
+    created = await AuthorRepository(session).create_author(
+        AuthorCreate.model_validate(
+            request.model_dump(include=set(AuthorCreate.model_fields.keys()))
+        )
+    )
+    print(f"  ✓ Created author: {first_name} {last_name} (ID: {created.id})")
+    return created, True
+
+
+async def seed_authors(session) -> list[AuthorOrm]:
+    if not AUTHORS_CSV.exists():
+        raise RuntimeError(f"Authors CSV not found: {AUTHORS_CSV}. Run upload_seeds or add the file.")
+
+    authors: list[AuthorOrm] = []
+    print(f"\nSeeding authors from {AUTHORS_CSV.name}...")
+    with AUTHORS_CSV.open("r", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            author, _ = await ensure_author(
+                session,
+                first_name=row["first_name"].strip(),
+                last_name=row["last_name"].strip(),
+                middle_name=row.get("middle_name", "").strip() or None,
+                about=row["about"].strip(),
+                image=row.get("image", "").strip() or None,
+            )
+            authors.append(author)
+
+    if not authors:
+        raise RuntimeError("No authors loaded from CSV.")
+    return authors
+
+
+async def ensure_book_author(session, *, book_id, author_id) -> bool:
+    links = await BookAuthorRepository(session).read_by_book_id(book_id)
+    if any(link.author_id == author_id for link in links):
+        return False
+
+    await BookAuthorRepository(session).create_book_author(
+        BookAuthorCreate(book_id=book_id, author_id=author_id)
+    )
+    return True
+
+
+async def seed_book_author_links(session, authors: list[AuthorOrm]) -> None:
+    book_repo = BookRepository(session)
+    total_books = await book_repo.count_books()
+    if total_books == 0:
+        raise RuntimeError("No books in catalog. Run scripts/upload_seeds.py --all first.")
+
+    books = await book_repo.list_books(offset=0, limit=total_books)
+    link_count = (total_books * BOOK_AUTHOR_LINK_RATIO) // 100
+    if link_count <= 0:
+        print("  - No books to link (catalog too small)")
+        return
+
+    print(
+        f"\nLinking authors to {link_count}/{total_books} books "
+        f"({BOOK_AUTHOR_LINK_RATIO}% of catalog)..."
+    )
+    created = 0
+    skipped = 0
+    for index, book in enumerate(books[:link_count]):
+        author = authors[index % len(authors)]
+        if await ensure_book_author(session, book_id=book.id, author_id=author.id):
+            created += 1
+            print(f"  ✓ Linked '{book.title}' → {author.first_name} {author.last_name}")
+        else:
+            skipped += 1
+
+    if skipped:
+        print(f"  - Skipped {skipped} existing book–author link(s)")
+    print(f"  ✓ Created {created} new book–author link(s)")
+
+
 async def ensure_listing(session, *, business_id, book) -> BusinessBookOrm:
     existing = await session.scalar(
         select(BusinessBookOrm).where(
@@ -379,9 +497,13 @@ async def main() -> None:
         if membership is None:
             raise RuntimeError("Failed to create business_user membership")
 
+        print("\n4. Authors and book–author links")
+        authors = await seed_authors(session)
+        await seed_book_author_links(session, authors)
+
         await seed_marketplace(session, business_id)
 
-        print("\n4. Extra marketplace businesses")
+        print("\n5. Extra marketplace businesses")
         for shop in EXTRA_MARKETPLACES:
             extra_shops.append(await seed_extra_marketplace(session, shop))
 

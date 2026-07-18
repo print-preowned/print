@@ -77,9 +77,10 @@ CSV files live in `scripts/seeds/`. Upload genres before books. Re-running `--al
 
 Creates dev smoke-test accounts and a marketplace slice:
 
-1. **Seller** — customer user with an owned business, ACTIVE business-book listings, and catalog variants
-2. **Five extra sellers** — Harbor Lane Books, Folio & Co., Pagecraft Collective, Northstar Rare & New, Inkwell Market (each with multiple book listings and variants)
-3. **Customer** — plain customer user (no business)
+1. **Authors** — from `scripts/seeds/authors.csv`, linked to 80% of catalog books
+2. **Seller** — customer user with an owned business, ACTIVE business-book listings, and catalog variants
+3. **Five extra sellers** — Harbor Lane Books, Folio & Co., Pagecraft Collective, Northstar Rare & New, Inkwell Market (each with multiple book listings and variants)
+4. **Customer** — plain customer user (no business)
 
 ```bash
 python scripts/seed_smoke_test.py
@@ -89,4 +90,4 @@ python scripts/seed_smoke_test.py
 
 Defaults: `seller@example.com` / `customer@example.com` with password `changeme`.
 
-Run after `seed_defaults.py` and `upload_seeds.py --all`. Idempotent: skips existing users, business, listings, and variants.
+Run after `seed_defaults.py` and `upload_seeds.py --all`. Idempotent: skips existing users, authors, book–author links, business, listings, and variants.
