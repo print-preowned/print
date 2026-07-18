@@ -21,10 +21,12 @@ from app.order.schemas import (
     DEFAULT_ORDER_CURRENCY,
     BusinessOrderDetailRead,
     BusinessOrderItemRead,
-    BusinessOrderSummaryRead,
+    CustomerOrderItemRead,
     OrderCreate,
     OrderDetailRead,
     OrderRead,
+    OrderSummaryItemPreview,
+    OrderSummaryRead,
     OrderUpdate,
 )
 from app.order_item.repository import OrderItemRepository
@@ -58,8 +60,18 @@ def _to_item_read(row) -> OrderItemRead:
     return OrderItemRead.model_validate(row)
 
 
-def _to_detail_read(row, items: list[OrderItemRead]) -> OrderDetailRead:
+def _to_detail_read(row, items: list[CustomerOrderItemRead]) -> OrderDetailRead:
     return OrderDetailRead(**_to_read(row).model_dump(), items=items)
+
+
+def _to_customer_item_read(item_row) -> CustomerOrderItemRead:
+    return CustomerOrderItemRead(
+        **OrderItemRead.model_validate(item_row.item).model_dump(),
+        book_title=item_row.book_title,
+        book_id=item_row.book_id,
+        image=item_row.image,
+        business_name=item_row.business_name,
+    )
 
 
 def _to_business_item_read(item_row) -> BusinessOrderItemRead:
@@ -69,16 +81,21 @@ def _to_business_item_read(item_row) -> BusinessOrderItemRead:
     )
 
 
-def _to_business_summary_read(
-    row, *, business_total_amount: Decimal, item_count: int
-) -> BusinessOrderSummaryRead:
-    return BusinessOrderSummaryRead(
+def _to_summary_read(
+    row,
+    *,
+    total_amount: Decimal,
+    item_count: int,
+    preview_items: list[OrderSummaryItemPreview] | None = None,
+) -> OrderSummaryRead:
+    return OrderSummaryRead(
         id=row.id,
         reference=row.reference,
         currency=row.currency,
         status=row.status,
-        business_total_amount=business_total_amount,
+        total_amount=total_amount,
         item_count=item_count,
+        preview_items=preview_items or [],
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -91,6 +108,10 @@ class OrderService:
         self._item_repo = OrderItemRepository(session)
         self._variant_repo = VariantRepository(session)
         self._business_book_repo = BusinessBookRepository(session)
+
+    async def _read_customer_items(self, order_id: uuid.UUID) -> list[CustomerOrderItemRead]:
+        rows = await self._repo.list_customer_order_items(order_id)
+        return [_to_customer_item_read(row) for row in rows]
 
     async def _read_items(self, order_id: uuid.UUID) -> list[OrderItemRead]:
         rows = await self._item_repo.list_order_items_by_order_id(order_id)
@@ -195,8 +216,8 @@ class OrderService:
 
         create_payload = _to_create(order, user_id, total_amount=total_amount)
         row = await self._repo.create_order(create_payload)
-        item_rows = await self._create_items(row.id, resolved_lines)
-        items = [_to_item_read(item_row) for item_row in item_rows]
+        await self._create_items(row.id, resolved_lines)
+        items = await self._read_customer_items(row.id)
         return BaseResponse[OrderDetailRead](
             status_code=201,
             message="Successful",
@@ -255,16 +276,67 @@ class OrderService:
             raise HTTPException(status_code=404, detail="Order not found")
         if user_id is not None and str(row.user_id) != user_id:
             raise HTTPException(status_code=404, detail="Order not found")
-        items = await self._read_items(parsed_id)
+        items = await self._read_customer_items(parsed_id)
         return BaseResponse[OrderDetailRead](
             status_code=200,
             message="Successful",
             data=_to_detail_read(row, items),
         )
 
+    async def read_for_customer(
+        self, user_id: str, params: ParamRequest
+    ) -> PaginatedResponse[OrderSummaryRead]:
+        parsed_user_id = _parse_id(user_id)
+        page = max(1, params.page)
+        size = params.size
+        offset = (page - 1) * size
+        search = (params.search or "").strip() or None
+
+        total_results = await self._repo.count_orders_for_user(
+            parsed_user_id, search=search
+        )
+        rows = await self._repo.list_orders_for_user(
+            parsed_user_id,
+            offset=offset,
+            limit=size,
+            search=search,
+        )
+        item_counts = await self._repo.item_counts_for_orders([row.id for row in rows])
+        previews = await self._repo.preview_items_for_orders([row.id for row in rows])
+        data = [
+            _to_summary_read(
+                row,
+                total_amount=row.total_amount,
+                item_count=int(item_counts.get(row.id, 0)),
+                preview_items=[
+                    OrderSummaryItemPreview(
+                        id=preview.item_id,
+                        book_title=preview.book_title,
+                        image=preview.image,
+                        quantity=preview.quantity,
+                    )
+                    for preview in previews.get(row.id, [])
+                ],
+            )
+            for row in rows
+        ]
+
+        total_pages = math.ceil(total_results / size) if size else 1
+        return PaginatedResponse[OrderSummaryRead](
+            status_code=200,
+            message="Successful",
+            data=data,
+            pagination=Pagination(
+                page=page,
+                size=size,
+                total_pages=total_pages,
+                total_results=total_results,
+            ),
+        )
+
     async def read_for_business(
         self, business_id: str, params: ParamRequest
-    ) -> PaginatedResponse[BusinessOrderSummaryRead]:
+    ) -> PaginatedResponse[OrderSummaryRead]:
         parsed_business_id = _parse_id(business_id)
         page = max(1, params.page)
         size = params.size
@@ -283,25 +355,25 @@ class OrderService:
         totals = await self._repo.business_totals_for_orders(
             parsed_business_id, [row.id for row in rows]
         )
-        data: list[BusinessOrderSummaryRead] = []
+        data: list[OrderSummaryRead] = []
         for row in rows:
             summary = totals.get(row.id, {})
-            raw_total = summary["business_total_amount"] or Decimal("0.00")
+            raw_total = summary["total_amount"] or Decimal("0.00")
             business_total = (
                 raw_total
                 if isinstance(raw_total, Decimal)
                 else Decimal(str(raw_total)).quantize(Decimal("0.01"))
             )
             data.append(
-                _to_business_summary_read(
+                _to_summary_read(
                     row,
-                    business_total_amount=business_total,
+                    total_amount=business_total,
                     item_count=int(summary["item_count"] or 0),
                 )
             )
 
         total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[BusinessOrderSummaryRead](
+        return PaginatedResponse[OrderSummaryRead](
             status_code=200,
             message="Successful",
             data=data,
@@ -331,7 +403,7 @@ class OrderService:
             parsed_business_id, [parsed_id]
         )
         summary = totals.get(parsed_id, {})
-        raw_total = summary.get("business_total_amount", Decimal("0.00"))
+        raw_total = summary.get("total_amount", Decimal("0.00"))
         business_total = (
             raw_total
             if isinstance(raw_total, Decimal)
@@ -339,9 +411,9 @@ class OrderService:
         )
         items = [_to_business_item_read(item_row) for item_row in item_rows]
         detail = BusinessOrderDetailRead(
-            **_to_business_summary_read(
+            **_to_summary_read(
                 row,
-                business_total_amount=business_total,
+                total_amount=business_total,
                 item_count=int(summary.get("item_count") or 0),
             ).model_dump(),
             items=items,

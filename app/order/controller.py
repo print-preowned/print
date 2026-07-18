@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.order.model import OrderCreateRequest, OrderStatusUpdateRequest
-from app.order.schemas import BusinessOrderDetailRead, BusinessOrderSummaryRead, OrderDetailRead
+from app.order.schemas import BusinessOrderDetailRead, OrderDetailRead, OrderSummaryRead
 from app.order.service import ReadableOrderService, WritableOrderService
 from app.utility.authorization import TokenPayload, get_business_id, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
@@ -24,6 +24,18 @@ async def create(
     service: WritableOrderService = Depends(),
 ) -> BaseResponse[OrderDetailRead]:
     return await service.create(payload, user_id=token.sub)
+
+
+@router.get("")
+async def read_for_customer(
+    page: int = 1,
+    size: int = 10,
+    search: str | None = None,
+    token: TokenPayload = Depends(require_context("CUSTOMER")),
+    service: ReadableOrderService = Depends(),
+) -> PaginatedResponse[OrderSummaryRead]:
+    param = ParamRequest(page=page, size=size, search=search)
+    return await service.read_for_customer(token.sub, param)
 
 
 @router.get("/{id}")
@@ -51,7 +63,7 @@ async def read_for_business(
     search: str | None = None,
     token: TokenPayload = Depends(require_privilege("READ_ORDER")),
     service: ReadableOrderService = Depends(),
-) -> PaginatedResponse[BusinessOrderSummaryRead]:
+) -> PaginatedResponse[OrderSummaryRead]:
     param = ParamRequest(page=page, size=size, search=search)
     return await service.read_for_business(_business_id(token), param)
 

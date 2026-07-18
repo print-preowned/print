@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.order_item.schemas import OrderItemRead
 
@@ -48,26 +48,43 @@ class OrderRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CustomerOrderItemRead(OrderItemRead):
+    book_title: str
+    book_id: uuid.UUID
+    image: str | None = None
+    business_name: str
+
+
 class OrderDetailRead(OrderRead):
-    items: list[OrderItemRead]
+    items: list[CustomerOrderItemRead]
 
 
 class BusinessOrderItemRead(OrderItemRead):
     book_title: str
 
 
-class BusinessOrderSummaryRead(BaseModel):
+class OrderSummaryItemPreview(BaseModel):
+    id: uuid.UUID
+    book_title: str
+    image: str | None = None
+    quantity: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderSummaryRead(BaseModel):
     id: uuid.UUID
     reference: str
     currency: str
     status: str
-    business_total_amount: Decimal
+    total_amount: Decimal
     item_count: int
+    preview_items: list[OrderSummaryItemPreview] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class BusinessOrderDetailRead(BusinessOrderSummaryRead):
+class BusinessOrderDetailRead(OrderSummaryRead):
     items: list[BusinessOrderItemRead]
