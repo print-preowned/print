@@ -8,6 +8,8 @@ from typing import TypedDict
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.author.orm import AuthorOrm
+from app.book_author.orm import BookAuthorOrm
 from app.business.orm import BusinessOrm
 from app.book.orm import BookOrm
 from app.business_book.orm import BusinessBookOrm
@@ -18,7 +20,7 @@ from app.variant.orm import VariantOrm
 
 
 class CustomerOrderItemRow:
-    __slots__ = ("item", "book_title", "book_id", "image", "business_name")
+    __slots__ = ("item", "book_title", "book_id", "image", "business_name", "author_names")
 
     def __init__(
         self,
@@ -28,16 +30,18 @@ class CustomerOrderItemRow:
         book_id: uuid.UUID,
         image: str | None,
         business_name: str,
+        author_names: list[str],
     ) -> None:
         self.item = item
         self.book_title = book_title
         self.book_id = book_id
         self.image = image
         self.business_name = business_name
+        self.author_names = author_names
 
 
 class BusinessOrderItemRow:
-    __slots__ = ("item", "book_title", "image")
+    __slots__ = ("item", "book_title", "image", "author_names")
 
     def __init__(
         self,
@@ -45,10 +49,12 @@ class BusinessOrderItemRow:
         *,
         book_title: str,
         image: str | None,
+        author_names: list[str],
     ) -> None:
         self.item = item
         self.book_title = book_title
         self.image = image
+        self.author_names = author_names
 
 
 class OrderItemPreviewRow:
@@ -75,9 +81,40 @@ class BusinessOrderTotals(TypedDict):
     total_amount: Decimal
 
 
+def _format_author_name(first_name: str, last_name: str) -> str:
+    return f"{first_name} {last_name}".strip() or "Unknown"
+
+
 class OrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def author_names_by_book_ids(
+        self, book_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[str]]:
+        if not book_ids:
+            return {}
+        statement = (
+            select(
+                BookAuthorOrm.book_id,
+                AuthorOrm.first_name,
+                AuthorOrm.last_name,
+            )
+            .join(AuthorOrm, AuthorOrm.id == BookAuthorOrm.author_id)
+            .where(
+                BookAuthorOrm.book_id.in_(book_ids),
+                BookAuthorOrm.deleted_at.is_(None),
+                AuthorOrm.deleted_at.is_(None),
+            )
+            .order_by(BookAuthorOrm.book_id, BookAuthorOrm.created_at.asc())
+        )
+        rows = await self._session.execute(statement)
+        names_by_book: dict[uuid.UUID, list[str]] = {}
+        for book_id, first_name, last_name in rows:
+            names_by_book.setdefault(book_id, []).append(
+                _format_author_name(first_name, last_name)
+            )
+        return names_by_book
 
     async def create_order(self, payload: OrderCreate) -> OrderOrm:
         row = OrderOrm(**payload.model_dump())
@@ -254,15 +291,29 @@ class OrderRepository:
             .order_by(OrderItemOrm.created_at.asc())
         )
         rows = await self._session.execute(statement)
+        item_rows = [
+            (
+                item,
+                book_title,
+                book_id,
+                business_name,
+                variant_image or listing_image or book_image,
+            )
+            for item, book_title, book_id, business_name, variant_image, listing_image, book_image in rows
+        ]
+        author_names = await self.author_names_by_book_ids(
+            [book_id for _, _, book_id, _, _ in item_rows]
+        )
         return [
             CustomerOrderItemRow(
                 item=item,
                 book_title=book_title,
                 book_id=book_id,
-                image=variant_image or listing_image or book_image,
+                image=image,
                 business_name=business_name,
+                author_names=author_names.get(book_id, []),
             )
-            for item, book_title, book_id, business_name, variant_image, listing_image, book_image in rows
+            for item, book_title, book_id, business_name, image in item_rows
         ]
 
     # TODO: optimize this query, traversing 2 extra tables for each order
@@ -380,6 +431,7 @@ class OrderRepository:
             select(
                 OrderItemOrm,
                 BookOrm.title,
+                BookOrm.id,
                 VariantOrm.image,
                 BusinessBookOrm.image,
                 BookOrm.image,
@@ -395,11 +447,24 @@ class OrderRepository:
             .order_by(OrderItemOrm.created_at.asc())
         )
         rows = await self._session.execute(statement)
+        item_rows = [
+            (
+                item,
+                book_title,
+                book_id,
+                variant_image or listing_image or book_image,
+            )
+            for item, book_title, book_id, variant_image, listing_image, book_image in rows
+        ]
+        author_names = await self.author_names_by_book_ids(
+            [book_id for _, _, book_id, _ in item_rows]
+        )
         return [
             BusinessOrderItemRow(
                 item=item,
                 book_title=book_title,
-                image=variant_image or listing_image or book_image,
+                image=image,
+                author_names=author_names.get(book_id, []),
             )
-            for item, book_title, variant_image, listing_image, book_image in rows
+            for item, book_title, book_id, image in item_rows
         ]

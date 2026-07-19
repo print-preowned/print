@@ -53,6 +53,7 @@ class CustomerOrderItemRead(OrderItemRead):
     book_id: uuid.UUID
     image: str | None = None
     business_name: str
+    author_names: list[str] = Field(default_factory=list)
 
 
 class OrderDetailRead(OrderRead):
@@ -62,6 +63,7 @@ class OrderDetailRead(OrderRead):
 class BusinessOrderItemRead(OrderItemRead):
     book_title: str
     image: str | None = None
+    author_names: list[str] = Field(default_factory=list)
 
 
 class OrderSummaryItemPreview(BaseModel):

@@ -71,6 +71,7 @@ def _to_customer_item_read(item_row) -> CustomerOrderItemRead:
         book_id=item_row.book_id,
         image=item_row.image,
         business_name=item_row.business_name,
+        author_names=item_row.author_names,
     )
 
 
@@ -79,6 +80,7 @@ def _to_business_item_read(item_row) -> BusinessOrderItemRead:
         **OrderItemRead.model_validate(item_row.item).model_dump(),
         book_title=item_row.book_title,
         image=item_row.image,
+        author_names=item_row.author_names,
     )
 
 
