@@ -61,6 +61,7 @@ class OrderDetailRead(OrderRead):
 
 class BusinessOrderItemRead(OrderItemRead):
     book_title: str
+    image: str | None = None
 
 
 class OrderSummaryItemPreview(BaseModel):

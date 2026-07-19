@@ -78,6 +78,7 @@ def _to_business_item_read(item_row) -> BusinessOrderItemRead:
     return BusinessOrderItemRead(
         **OrderItemRead.model_validate(item_row.item).model_dump(),
         book_title=item_row.book_title,
+        image=item_row.image,
     )
 
 

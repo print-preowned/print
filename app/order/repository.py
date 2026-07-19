@@ -37,11 +37,18 @@ class CustomerOrderItemRow:
 
 
 class BusinessOrderItemRow:
-    __slots__ = ("item", "book_title")
+    __slots__ = ("item", "book_title", "image")
 
-    def __init__(self, item: OrderItemOrm, book_title: str) -> None:
+    def __init__(
+        self,
+        item: OrderItemOrm,
+        *,
+        book_title: str,
+        image: str | None,
+    ) -> None:
         self.item = item
         self.book_title = book_title
+        self.image = image
 
 
 class OrderItemPreviewRow:
@@ -370,7 +377,13 @@ class OrderRepository:
         self, order_id: uuid.UUID, business_id: uuid.UUID
     ) -> list[BusinessOrderItemRow]:
         statement = (
-            select(OrderItemOrm, BookOrm.title)
+            select(
+                OrderItemOrm,
+                BookOrm.title,
+                VariantOrm.image,
+                BusinessBookOrm.image,
+                BookOrm.image,
+            )
             .join(VariantOrm, VariantOrm.id == OrderItemOrm.variant_id)
             .join(BusinessBookOrm, BusinessBookOrm.id == VariantOrm.business_book_id)
             .join(BookOrm, BookOrm.id == BusinessBookOrm.book_id)
@@ -383,6 +396,10 @@ class OrderRepository:
         )
         rows = await self._session.execute(statement)
         return [
-            BusinessOrderItemRow(item=item, book_title=book_title)
-            for item, book_title in rows
+            BusinessOrderItemRow(
+                item=item,
+                book_title=book_title,
+                image=variant_image or listing_image or book_image,
+            )
+            for item, book_title, variant_image, listing_image, book_image in rows
         ]
