@@ -40,7 +40,8 @@ def test_revoke_token_payload_uses_jti_and_exp() -> None:
             "exp": int(time.time()) + 3600,
             "jti": "payload-jti",
             "ctx": "BUSINESS",
-            "business": {"id": "b1", "privileges": ["READ_BOOK"], "is_owner": True},
+            "privileges": ["READ_BOOK"],
+            "business": {"id": "b1", "is_owner": True},
         }
     )
     with patch("app.utility.revocation.revoke_jti") as mock_revoke_jti:

@@ -4,7 +4,7 @@ Token generation utility following PRINT Authorization & Context Model
 Token structure requirements:
 - Required base fields: iss, aud, sub, iat, exp, jti, ctx
 - Context: CUSTOMER or BUSINESS
-- BUSINESS tokens require: business.id, business.privileges, business.is_owner
+- BUSINESS tokens require: privileges, business.id, business.is_owner
 """
 
 import uuid
@@ -72,12 +72,12 @@ def create_business_token(
     Create a BUSINESS context token
 
     Following MDC-TOKEN-B-1: Business tokens must have:
+    - privileges (top-level, materialized)
     - business.id
-    - business.privileges
     - business.is_owner
     - business.role (id, name, is_system)
 
-    Following MDC-TOKEN-B-2: Privileges must be materialized
+    Following MDC-TOKEN-B-2: Privileges must be materialized at top level
     """
     now = datetime.now(timezone.utc)
     exp = now + timedelta(minutes=TOKEN_TTL_MINUTES)
@@ -90,6 +90,7 @@ def create_business_token(
         "exp": int(exp.timestamp()),
         "jti": generate_jti(),
         "ctx": "BUSINESS",
+        "privileges": privileges,
         "business": {
             "id": business_id,
             "role": {
@@ -98,7 +99,6 @@ def create_business_token(
                 "is_system": is_system_role,
             },
             "is_owner": is_owner,
-            "privileges": privileges,  # Materialized privileges
         },
     }
 

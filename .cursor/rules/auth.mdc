@@ -94,6 +94,7 @@ token:
   business_token:
     ctx: BUSINESS
     required_fields:
+      privileges: array[string]
       business:
         id: string
         role:
@@ -101,7 +102,6 @@ token:
           name: string
           is_system: boolean
         is_owner: boolean
-        privileges: array[string]
 
 forbidden_token_fields:
   - user_email

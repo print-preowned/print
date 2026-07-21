@@ -21,7 +21,7 @@ Following MDC-BE-1: **No database access in middleware**
 
 - Validates token structure (required fields: `iss`, `aud`, `sub`, `iat`, `exp`, `jti`, `ctx`)
 - Validates context (CUSTOMER or BUSINESS)
-- Validates BUSINESS token structure (business.id, business.privileges, business.is_owner)
+- Validates BUSINESS token structure (privileges, business.id, business.is_owner)
 - Checks token revocation (jti in Redis - lightweight, not DB query)
 - Returns `TokenPayload` object with decoded token data
 
@@ -102,7 +102,7 @@ async def create(
 3. get_token_payload() validates:
    - Token structure (iss, aud, sub, iat, exp, jti, ctx)
    - Context (CUSTOMER or BUSINESS)
-   - BUSINESS token structure (business.id, privileges, is_owner)
+   - BUSINESS token structure (privileges, business.id, business.is_owner)
    - Token revocation (jti check)
    ↓
 4. TokenPayload stored in request.state

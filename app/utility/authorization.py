@@ -75,12 +75,14 @@ async def get_token_payload(request: Request) -> TokenPayload:
                     detail="Invalid token: BUSINESS token missing business field",
                 )
 
+            if "privileges" not in payload:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid token: BUSINESS token missing privileges field",
+                )
+
             business = payload["business"]
-            if (
-                not business.get("id")
-                or not business.get("privileges")
-                or "is_owner" not in business
-            ):
+            if not business.get("id") or "is_owner" not in business:
                 raise HTTPException(
                     status_code=401,
                     detail="Invalid token: BUSINESS token missing required fields",
@@ -114,7 +116,6 @@ async def get_token_payload(request: Request) -> TokenPayload:
             revoked = get_key(f"revoked:{jti}")
             if revoked:
                 raise HTTPException(status_code=401, detail="Token has been revoked")
-
         return TokenPayload(payload)
 
     except ValueError as e:
@@ -206,13 +207,7 @@ def require_privilege(privilege: str):
                 detail=f"Privilege '{privilege}' requires BUSINESS or PLATFORM context",
             )
 
-        # Check privilege
-        if token_payload.ctx == "BUSINESS":
-            privileges = (
-                token_payload.business.get("privileges", []) if token_payload.business else []
-            )
-        else:  # PLATFORM
-            privileges = token_payload.privileges
+        privileges = token_payload.privileges
 
         # Check if user has the required privilege
         has_privilege = privilege in privileges
@@ -291,10 +286,7 @@ def require_privilege_and_owner(privilege: str):
             raise HTTPException(status_code=403, detail="User unauthorized to access this resource")
         else:
             # BUSINESS context: require privilege AND owner status
-            privileges = (
-                token_payload.business.get("privileges", []) if token_payload.business else []
-            )
-            if privilege not in privileges:
+            if privilege not in token_payload.privileges:
                 raise HTTPException(
                     status_code=403, detail=f"Insufficient privileges: '{privilege}' required"
                 )

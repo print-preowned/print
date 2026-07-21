@@ -22,9 +22,9 @@ def _customer_token_payload(user_id: uuid.UUID) -> TokenPayload:
             "exp": int(datetime.now(UTC).timestamp()) + 3600,
             "jti": "delete-actor-jti",
             "ctx": "BUSINESS",
+            "privileges": ["DELETE_BUSINESS"],
             "business": {
                 "id": str(uuid.uuid4()),
-                "privileges": ["DELETE_BUSINESS"],
                 "is_owner": True,
             },
         }
