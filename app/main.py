@@ -31,6 +31,7 @@ from .business_rating import controller as businessRatingController
 from .business_user import controller as businessUserController
 from .genre import controller as genreController
 from .order import controller as orderController
+from .user_address import controller as userAddressController
 from .order_item import controller as orderItemController
 from .privilege import controller as privilegeController
 from .role import controller as roleController
@@ -176,6 +177,7 @@ app.include_router(businessUserController.router)
 app.include_router(businessRatingController.customer_router)
 app.include_router(businessRatingController.business_router)
 app.include_router(variantController.router)
+app.include_router(userAddressController.router)
 app.include_router(orderController.router)
 app.include_router(orderController.business_router)
 app.include_router(orderItemController.router)

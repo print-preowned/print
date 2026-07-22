@@ -1,0 +1,57 @@
+---
+alwaysApply: true
+---
+addresses:
+  user_addresses:
+    table: user_addresses
+    owner: users.id
+    access_context: CUSTOMER
+
+    endpoints:
+      GET /addresses:
+        context: CUSTOMER
+        enforce:
+          - user_id == token.sub
+
+      POST /addresses:
+        context: CUSTOMER
+        enforce:
+          - user_id == token.sub
+
+      GET /addresses/{id}:
+        context: CUSTOMER
+        enforce:
+          - user_id == token.sub
+
+      PATCH /addresses/{id}:
+        context: CUSTOMER
+        enforce:
+          - user_id == token.sub
+
+      DELETE /addresses/{id}:
+        context: CUSTOMER
+        enforce:
+          - user_id == token.sub
+
+      POST /addresses/{id}/set-default:
+        context: CUSTOMER
+        enforce:
+          - user_id == token.sub
+
+    invariants:
+      - id: MDC-BE-ADDRESS-1
+        assertion: user_addresses_require_customer_context
+
+      - id: MDC-BE-ADDRESS-2
+        assertion: user_addresses_scoped_to_token_sub
+
+      - id: MDC-BE-ADDRESS-3
+        assertion: at_most_one_active_default_per_user
+
+      - id: MDC-BE-ADDRESS-4
+        assertion: delivery_phone_is_not_users_account_phone
+
+  deferred:
+    - business_locations
+    - order_shipping_address_snapshot
+    - checkout_address_selection
