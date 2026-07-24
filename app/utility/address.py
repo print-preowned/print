@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 DEFAULT_COUNTRY_CODE = "NG"
 MAX_USER_ADDRESSES = 5
+MAX_BUSINESS_ADDRESSES = 5
 
 NIGERIAN_STATES: frozenset[str] = frozenset(
     {

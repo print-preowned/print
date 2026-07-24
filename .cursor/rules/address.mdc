@@ -51,7 +51,61 @@ addresses:
       - id: MDC-BE-ADDRESS-4
         assertion: delivery_phone_is_not_users_account_phone
 
+  business_locations:
+    table: business_addresses
+    owner: businesses.id
+    access_context: BUSINESS
+
+    endpoints:
+      GET /business-addresses:
+        context: BUSINESS
+        privilege: READ_BUSINESS
+        enforce:
+          - business_id == token.business.id
+
+      POST /business-addresses:
+        context: BUSINESS
+        privilege: UPDATE_BUSINESS
+        enforce:
+          - business_id == token.business.id
+
+      GET /business-addresses/{id}:
+        context: BUSINESS
+        privilege: READ_BUSINESS
+        enforce:
+          - business_id == token.business.id
+
+      PATCH /business-addresses/{id}:
+        context: BUSINESS
+        privilege: UPDATE_BUSINESS
+        enforce:
+          - business_id == token.business.id
+
+      DELETE /business-addresses/{id}:
+        context: BUSINESS
+        privilege: UPDATE_BUSINESS
+        enforce:
+          - business_id == token.business.id
+
+      POST /business-addresses/{id}/set-primary:
+        context: BUSINESS
+        privilege: UPDATE_BUSINESS
+        enforce:
+          - business_id == token.business.id
+
+    invariants:
+      - id: MDC-BE-ADDRESS-5
+        assertion: business_locations_require_business_context
+
+      - id: MDC-BE-ADDRESS-6
+        assertion: business_locations_scoped_to_token_business_id
+
+      - id: MDC-BE-ADDRESS-7
+        assertion: at_most_one_active_primary_per_business
+
+      - id: MDC-BE-ADDRESS-8
+        assertion: location_phone_is_distinct_from_user_account_phone
+
   deferred:
-    - business_locations
     - order_shipping_address_snapshot
     - checkout_address_selection
