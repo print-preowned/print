@@ -25,6 +25,8 @@ class Order(BaseModel):
 class OrderCreateRequest(BaseModel):
     reference: str
     total_amount: float
+    fulfillment_type: Literal["DELIVERY", "PICKUP"] = "DELIVERY"
+    shipping_address_id: str | None = None
     items: list[OrderItemCreateRequest] = Field(min_length=1)
 
 

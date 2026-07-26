@@ -10,6 +10,7 @@ from fastapi import HTTPException
 DEFAULT_COUNTRY_CODE = "NG"
 MAX_USER_ADDRESSES = 5
 MAX_BUSINESS_ADDRESSES = 5
+FULFILLMENT_TYPE_DELIVERY = "DELIVERY"
 
 NIGERIAN_STATES: frozenset[str] = frozenset(
     {
@@ -149,3 +150,19 @@ def apply_address_updates(
         country_code=merged.get("country_code") or DEFAULT_COUNTRY_CODE,
         phone_number=merged.get("phone_number"),
     )
+
+
+def fulfillment_snapshot_from_user_address(row) -> dict[str, str | None]:
+    """Map a user address row to order fulfillment snapshot columns."""
+    return {
+        "fulfillment_type": FULFILLMENT_TYPE_DELIVERY,
+        "recipient_name": row.recipient_name,
+        "address_label": normalize_whitespace(row.label),
+        "phone_number": row.phone_number,
+        "line1": row.line1,
+        "line2": row.line2,
+        "city": row.city,
+        "state": row.state,
+        "postal_code": row.postal_code,
+        "country_code": row.country_code,
+    }

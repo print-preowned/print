@@ -23,6 +23,18 @@ class OrderCreate(BaseModel):
     currency: str = DEFAULT_ORDER_CURRENCY
     total_amount: Decimal
     status: str = "PLACED"
+    business_id: uuid.UUID | None = None
+    business_name: str | None = None
+    fulfillment_type: str | None = None
+    recipient_name: str | None = None
+    address_label: str | None = None
+    phone_number: str | None = None
+    line1: str | None = None
+    line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country_code: str | None = None
 
 
 class OrderUpdate(BaseModel):
@@ -35,6 +47,19 @@ class OrderUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class OrderFulfillmentAddressRead(BaseModel):
+    fulfillment_type: str
+    recipient_name: str
+    address_label: str | None = None
+    phone_number: str | None = None
+    line1: str
+    line2: str | None = None
+    city: str
+    state: str
+    postal_code: str | None = None
+    country_code: str
+
+
 class OrderRead(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
@@ -42,6 +67,9 @@ class OrderRead(BaseModel):
     currency: str
     total_amount: Decimal
     status: str
+    business_id: uuid.UUID | None = None
+    business_name: str | None = None
+    fulfillment_address: OrderFulfillmentAddressRead | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -83,6 +111,9 @@ class OrderSummaryRead(BaseModel):
     total_amount: Decimal
     item_count: int
     preview_items: list[OrderSummaryItemPreview] = Field(default_factory=list)
+    business_id: uuid.UUID | None = None
+    business_name: str | None = None
+    fulfillment_address: OrderFulfillmentAddressRead | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -7,6 +7,7 @@ from decimal import Decimal
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.business.repository import BusinessRepository
 from app.business_book.repository import BusinessBookRepository
 from app.order.model import (
     OrderCreateRequest,
@@ -24,11 +25,14 @@ from app.order.schemas import (
     CustomerOrderItemRead,
     OrderCreate,
     OrderDetailRead,
+    OrderFulfillmentAddressRead,
     OrderRead,
     OrderSummaryItemPreview,
     OrderSummaryRead,
     OrderUpdate,
 )
+from app.user_address.repository import UserAddressRepository
+from app.utility.address import fulfillment_snapshot_from_user_address
 from app.order_item.repository import OrderItemRepository
 from app.order_item.schemas import OrderItemRead
 from app.order_item.service import build_order_item_create
@@ -38,21 +42,62 @@ from app.variant.repository import VariantRepository, effective_price_decimal
 
 
 def _parse_id(value: str) -> uuid.UUID:
-    return uuid.UUID(value)
+    try:
+        return uuid.UUID(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid identifier") from exc
+
+
+def _fulfillment_address_from_row(row) -> OrderFulfillmentAddressRead | None:
+    if row.fulfillment_type is None or row.line1 is None:
+        return None
+    return OrderFulfillmentAddressRead(
+        fulfillment_type=row.fulfillment_type,
+        recipient_name=row.recipient_name or "",
+        address_label=row.address_label,
+        phone_number=row.phone_number,
+        line1=row.line1,
+        line2=row.line2,
+        city=row.city or "",
+        state=row.state or "",
+        postal_code=row.postal_code,
+        country_code=row.country_code or "NG",
+    )
 
 
 def _to_read(row) -> OrderRead:
-    return OrderRead.model_validate(row)
+    return OrderRead(
+        id=row.id,
+        user_id=row.user_id,
+        reference=row.reference,
+        currency=row.currency,
+        total_amount=row.total_amount,
+        status=row.status,
+        business_id=row.business_id,
+        business_name=row.business_name,
+        fulfillment_address=_fulfillment_address_from_row(row),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 def _to_create(
-    payload: OrderCreateRequest, user_id: str, *, total_amount: Decimal
+    payload: OrderCreateRequest,
+    user_id: str,
+    *,
+    total_amount: Decimal,
+    business_id: uuid.UUID,
+    business_name: str,
+    fulfillment_fields: dict[str, str | None],
 ) -> OrderCreate:
     return OrderCreate(
         user_id=_parse_id(user_id),
         reference=payload.reference,
         currency=DEFAULT_ORDER_CURRENCY,
         total_amount=total_amount,
+        business_id=business_id,
+        business_name=business_name,
+        **fulfillment_fields,  # type: ignore[arg-type]
     )
 
 
@@ -99,6 +144,9 @@ def _to_summary_read(
         total_amount=total_amount,
         item_count=item_count,
         preview_items=preview_items or [],
+        business_id=row.business_id,
+        business_name=row.business_name,
+        fulfillment_address=_fulfillment_address_from_row(row),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -111,6 +159,8 @@ class OrderService:
         self._item_repo = OrderItemRepository(session)
         self._variant_repo = VariantRepository(session)
         self._business_book_repo = BusinessBookRepository(session)
+        self._business_repo = BusinessRepository(session)
+        self._user_address_repo = UserAddressRepository(session)
 
     async def _read_customer_items(self, order_id: uuid.UUID) -> list[CustomerOrderItemRead]:
         rows = await self._repo.list_customer_order_items(order_id)
@@ -128,7 +178,7 @@ class OrderService:
 
     async def _resolve_order_lines(
         self, items: list[OrderItemCreateRequest]
-    ) -> tuple[list[OrderItemCreateRequest], Decimal]:
+    ) -> tuple[list[OrderItemCreateRequest], Decimal, uuid.UUID]:
         if not items:
             raise HTTPException(status_code=422, detail="Order must include at least one item")
 
@@ -141,6 +191,7 @@ class OrderService:
 
         resolved: list[OrderItemCreateRequest] = []
         total = Decimal("0")
+        business_id: uuid.UUID | None = None
 
         for variant_id, quantity in quantities.items():
             variant = await self._variant_repo.read_variant_by_id(variant_id)
@@ -152,6 +203,14 @@ class OrderService:
             )
             if listing is None or listing.status != "ACTIVE":
                 raise HTTPException(status_code=422, detail="An item is no longer available")
+
+            if business_id is None:
+                business_id = listing.business_id
+            elif listing.business_id != business_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="All items must be from the same seller",
+                )
 
             if variant.currency != DEFAULT_ORDER_CURRENCY:
                 raise HTTPException(status_code=422, detail="An item has mismatching currency")
@@ -175,7 +234,8 @@ class OrderService:
             )
             total += unit_price * quantity
 
-        return resolved, total.quantize(Decimal("0.01"))
+        assert business_id is not None
+        return resolved, total.quantize(Decimal("0.01")), business_id
 
     async def _create_items(self, order_id: uuid.UUID, lines: list[OrderItemCreateRequest]) -> list:
         item_rows = []
@@ -209,7 +269,7 @@ class OrderService:
     async def create(
         self, order: OrderCreateRequest, user_id: str
     ) -> BaseResponse[OrderDetailRead]:
-        resolved_lines, total_amount = await self._resolve_order_lines(order.items)
+        resolved_lines, total_amount, business_id = await self._resolve_order_lines(order.items)
         client_total = Decimal(str(order.total_amount)).quantize(Decimal("0.01"))
         if client_total != total_amount:
             raise HTTPException(
@@ -217,7 +277,29 @@ class OrderService:
                 detail="Cart is out of date. Refresh your cart and try again.",
             )
 
-        create_payload = _to_create(order, user_id, total_amount=total_amount)
+        business = await self._business_repo.read_by_id(business_id)
+        if business is None:
+            raise HTTPException(status_code=422, detail="An item is no longer available")
+
+        parsed_user_id = _parse_id(user_id)
+        if order.fulfillment_type == "DELIVERY":
+            if not order.shipping_address_id:
+                raise HTTPException(status_code=422, detail="Delivery address is required")
+            address_id = _parse_id(order.shipping_address_id)
+            address = await self._user_address_repo.read_by_id(address_id, parsed_user_id)
+            if address is None:
+                raise HTTPException(status_code=422, detail="Delivery address not found")
+            fulfillment_fields = fulfillment_snapshot_from_user_address(address)
+        else:
+            raise HTTPException(status_code=422, detail="Unsupported fulfillment type")
+        create_payload = _to_create(
+            order,
+            user_id,
+            total_amount=total_amount,
+            business_id=business_id,
+            business_name=business.name,
+            fulfillment_fields=fulfillment_fields,
+        )
         row = await self._repo.create_order(create_payload)
         await self._create_items(row.id, resolved_lines)
         items = await self._read_customer_items(row.id)
