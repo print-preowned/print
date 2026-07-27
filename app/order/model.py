@@ -7,7 +7,13 @@ from app.order_item.model import OrderItemCreateRequest
 from app.order.schemas import ORDER_FULFILLMENT_STATUSES
 
 OrderFulfillmentStatus = Literal[
-    "PLACED", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"
+    "PLACED",
+    "CONFIRMED",
+    "SHIPPED",
+    "DELIVERED",
+    "READY_FOR_PICKUP",
+    "PICKED_UP",
+    "CANCELLED",
 ]
 
 
@@ -27,6 +33,7 @@ class OrderCreateRequest(BaseModel):
     total_amount: float
     fulfillment_type: Literal["DELIVERY", "PICKUP"] = "DELIVERY"
     shipping_address_id: str | None = None
+    pickup_location_id: str | None = None
     items: list[OrderItemCreateRequest] = Field(min_length=1)
 
 
@@ -48,20 +55,34 @@ class OrderStatusUpdateRequest(BaseModel):
 
 SELLER_ORDER_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "PLACED": frozenset({"CONFIRMED", "CANCELLED"}),
-    "ACTIVE": frozenset({"CONFIRMED", "CANCELLED"}),
-    "CONFIRMED": frozenset({"SHIPPED", "CANCELLED"}),
+    "CONFIRMED": frozenset({"SHIPPED", "READY_FOR_PICKUP", "CANCELLED"}),
     "SHIPPED": frozenset({"DELIVERED"}),
     "DELIVERED": frozenset(),
+    "READY_FOR_PICKUP": frozenset({"PICKED_UP"}),
+    "PICKED_UP": frozenset(),
     "CANCELLED": frozenset(),
 }
+
+DELIVERY_FULFILLMENT_STATUSES = frozenset({"SHIPPED", "DELIVERED"})
+PICKUP_FULFILLMENT_STATUSES = frozenset({"READY_FOR_PICKUP", "PICKED_UP"})
 
 
 CUSTOMER_CANCELLABLE_ORDER_STATUSES = frozenset({"PLACED", "CONFIRMED"})
 
 
-def assert_valid_order_status_transition(current: str, target: str) -> None:
+def assert_valid_order_status_transition(
+    current: str,
+    target: str,
+    *,
+    fulfillment_type: str = "DELIVERY",
+) -> None:
     if target not in ORDER_FULFILLMENT_STATUSES:
         raise ValueError(f"Invalid order status: {target}")
+    normalized_fulfillment = fulfillment_type.strip().upper()
+    if target in DELIVERY_FULFILLMENT_STATUSES and normalized_fulfillment != "DELIVERY":
+        raise ValueError(f"Cannot transition order from {current} to {target}")
+    if target in PICKUP_FULFILLMENT_STATUSES and normalized_fulfillment != "PICKUP":
+        raise ValueError(f"Cannot transition order from {current} to {target}")
     allowed = SELLER_ORDER_STATUS_TRANSITIONS.get(current, frozenset())
     if target not in allowed:
         raise ValueError(f"Cannot transition order from {current} to {target}")

@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_address.model import BusinessAddressCreateRequest, BusinessAddressUpdateRequest
 from app.business_address.repository import BusinessAddressRepository
-from app.business_address.schemas import BusinessAddressCreate, BusinessAddressRead, BusinessAddressUpdate
+from app.business_address.schemas import (
+    BusinessAddressCreate,
+    BusinessAddressRead,
+    BusinessAddressUpdate,
+)
 from app.utility.address import (
     MAX_BUSINESS_ADDRESSES,
     normalize_whitespace,
@@ -77,6 +81,9 @@ class BusinessAddressService:
         if is_primary:
             await self._repo.clear_primary_for_business(parsed_business_id)
 
+        if fields.get("pickup_enabled"):
+            await self._repo.clear_pickup_enabled_for_business(parsed_business_id)
+
         row = await self._repo.create(
             BusinessAddressCreate(
                 business_id=parsed_business_id,
@@ -131,6 +138,12 @@ class BusinessAddressService:
 
         if update_data.get("is_primary") is True:
             await self._repo.clear_primary_for_business(parsed_business_id, exclude_id=parsed_id)
+
+        if update_data.get("pickup_enabled") is True:
+            await self._repo.clear_pickup_enabled_for_business(
+                parsed_business_id,
+                exclude_id=parsed_id,
+            )
 
         updated = await self._repo.update(
             parsed_id,
@@ -208,6 +221,23 @@ class BusinessAddressService:
         row = await self._repo.read_by_id(parsed_id, parsed_business_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Location not found")
+        return BaseResponse[BusinessAddressRead](
+            status_code=200,
+            message="Successful",
+            data=_to_read(row),
+        )
+
+    async def read_pickup_location_for_customer(
+        self,
+        business_id: str,
+    ) -> BaseResponse[BusinessAddressRead]:
+        try:
+            parsed_business_id = _parse_business_id(business_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="Pickup location not found") from exc
+        row = await self._repo.read_pickup_location_by_business(parsed_business_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Pickup location not found")
         return BaseResponse[BusinessAddressRead](
             status_code=200,
             message="Successful",

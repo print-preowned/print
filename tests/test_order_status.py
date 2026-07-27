@@ -23,6 +23,43 @@ class TestOrderStatusTransitions:
     def test_confirmed_to_cancelled(self) -> None:
         assert_valid_order_status_transition("CONFIRMED", "CANCELLED")
 
+    def test_delivery_confirmed_to_shipped(self) -> None:
+        assert_valid_order_status_transition(
+            "CONFIRMED",
+            "SHIPPED",
+            fulfillment_type="DELIVERY",
+        )
+
+    def test_pickup_confirmed_to_ready_for_pickup(self) -> None:
+        assert_valid_order_status_transition(
+            "CONFIRMED",
+            "READY_FOR_PICKUP",
+            fulfillment_type="PICKUP",
+        )
+
+    def test_pickup_ready_to_picked_up(self) -> None:
+        assert_valid_order_status_transition(
+            "READY_FOR_PICKUP",
+            "PICKED_UP",
+            fulfillment_type="PICKUP",
+        )
+
+    def test_pickup_cannot_ship(self) -> None:
+        with pytest.raises(ValueError, match="Cannot transition"):
+            assert_valid_order_status_transition(
+                "CONFIRMED",
+                "SHIPPED",
+                fulfillment_type="PICKUP",
+            )
+
+    def test_delivery_cannot_ready_for_pickup(self) -> None:
+        with pytest.raises(ValueError, match="Cannot transition"):
+            assert_valid_order_status_transition(
+                "CONFIRMED",
+                "READY_FOR_PICKUP",
+                fulfillment_type="DELIVERY",
+            )
+
     def test_delivered_is_terminal(self) -> None:
         with pytest.raises(ValueError, match="Cannot transition"):
             assert_valid_order_status_transition("DELIVERED", "SHIPPED")

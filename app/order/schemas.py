@@ -11,7 +11,15 @@ from app.order_item.schemas import OrderItemRead
 DEFAULT_ORDER_CURRENCY = "NGN"
 
 ORDER_FULFILLMENT_STATUSES = frozenset(
-    {"PLACED", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"}
+    {
+        "PLACED",
+        "CONFIRMED",
+        "SHIPPED",
+        "DELIVERED",
+        "READY_FOR_PICKUP",
+        "PICKED_UP",
+        "CANCELLED",
+    }
 )
 # Legacy rows created before fulfillment statuses used ACTIVE.
 LEGACY_ORDER_STATUS_ALIASES = frozenset({"ACTIVE"})

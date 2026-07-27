@@ -8,6 +8,7 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.repository import BusinessRepository
+from app.business_address.repository import BusinessAddressRepository
 from app.business_book.repository import BusinessBookRepository
 from app.order.model import (
     OrderCreateRequest,
@@ -32,7 +33,10 @@ from app.order.schemas import (
     OrderUpdate,
 )
 from app.user_address.repository import UserAddressRepository
-from app.utility.address import fulfillment_snapshot_from_user_address
+from app.utility.address import (
+    fulfillment_snapshot_from_business_address,
+    fulfillment_snapshot_from_user_address,
+)
 from app.order_item.repository import OrderItemRepository
 from app.order_item.schemas import OrderItemRead
 from app.order_item.service import build_order_item_create
@@ -161,6 +165,7 @@ class OrderService:
         self._business_book_repo = BusinessBookRepository(session)
         self._business_repo = BusinessRepository(session)
         self._user_address_repo = UserAddressRepository(session)
+        self._business_address_repo = BusinessAddressRepository(session)
 
     async def _read_customer_items(self, order_id: uuid.UUID) -> list[CustomerOrderItemRead]:
         rows = await self._repo.list_customer_order_items(order_id)
@@ -290,6 +295,19 @@ class OrderService:
             if address is None:
                 raise HTTPException(status_code=422, detail="Delivery address not found")
             fulfillment_fields = fulfillment_snapshot_from_user_address(address)
+        elif order.fulfillment_type == "PICKUP":
+            if not order.pickup_location_id:
+                raise HTTPException(status_code=422, detail="Pickup location is required")
+            location_id = _parse_id(order.pickup_location_id)
+            location = await self._business_address_repo.read_by_id(location_id, business_id)
+            if location is None or not location.pickup_enabled:
+                raise HTTPException(status_code=422, detail="Pickup location not found")
+            sole_pickup = await self._business_address_repo.read_pickup_location_by_business(
+                business_id
+            )
+            if sole_pickup is None or sole_pickup.id != location_id:
+                raise HTTPException(status_code=422, detail="Pickup location not found")
+            fulfillment_fields = fulfillment_snapshot_from_business_address(location)
         else:
             raise HTTPException(status_code=422, detail="Unsupported fulfillment type")
         create_payload = _to_create(
@@ -521,7 +539,11 @@ class OrderService:
             raise HTTPException(status_code=404, detail="Order not found")
 
         try:
-            assert_valid_order_status_transition(row.status, payload.status)
+            assert_valid_order_status_transition(
+                row.status,
+                payload.status,
+                fulfillment_type=row.fulfillment_type or "DELIVERY",
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -106,6 +106,14 @@ addresses:
       - id: MDC-BE-ADDRESS-8
         assertion: location_phone_is_distinct_from_user_account_phone
 
+      - id: MDC-BE-ADDRESS-11
+        assertion: at_most_one_pickup_enabled_per_business
+
+    customer_pickup_read:
+      GET /businesses/{businessId}/pickup-location:
+        context: CUSTOMER
+        returns: single pickup-enabled location or 404
+
   order_fulfillment:
     table: orders
     snapshot_columns:
@@ -127,14 +135,20 @@ addresses:
       POST /orders:
         context: CUSTOMER
         request:
-          fulfillment_type: DELIVERY
+          fulfillment_type: DELIVERY | PICKUP
           shipping_address_id: required when fulfillment_type is DELIVERY
+          pickup_location_id: required when fulfillment_type is PICKUP
         behavior:
-          - validate_address_belongs_to_token_sub
+          - validate_address_belongs_to_token_sub for DELIVERY
+          - validate_pickup_location_belongs_to_cart_business and is sole pickup location for PICKUP
           - snapshot_fulfillment_columns_on_order_row
           - snapshot_business_name_from_businesses_name
           - derive_business_id_from_line_items
           - reject_mixed_business_carts
+
+    status_paths:
+      DELIVERY: PLACED -> CONFIRMED -> SHIPPED -> DELIVERED
+      PICKUP: PLACED -> CONFIRMED -> READY_FOR_PICKUP -> PICKED_UP
 
     invariants:
       - id: MDC-BE-ADDRESS-9
@@ -142,3 +156,6 @@ addresses:
 
       - id: MDC-BE-ADDRESS-10
         assertion: delivery_orders_require_valid_shipping_address_id
+
+      - id: MDC-BE-ADDRESS-12
+        assertion: pickup_orders_require_valid_pickup_location_id

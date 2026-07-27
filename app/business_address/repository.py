@@ -140,3 +140,34 @@ class BusinessAddressRepository:
         row.is_primary = True
         await self._session.flush()
         return row
+
+    async def clear_pickup_enabled_for_business(
+        self,
+        business_id: uuid.UUID,
+        *,
+        exclude_id: uuid.UUID | None = None,
+    ) -> None:
+        statement = (
+            update(BusinessAddressOrm)
+            .where(
+                BusinessAddressOrm.business_id == business_id,
+                BusinessAddressOrm.deleted_at.is_(None),
+                BusinessAddressOrm.pickup_enabled.is_(True),
+            )
+            .values(pickup_enabled=False)
+        )
+        if exclude_id is not None:
+            statement = statement.where(BusinessAddressOrm.id != exclude_id)
+        await self._session.execute(statement)
+
+    async def read_pickup_location_by_business(
+        self,
+        business_id: uuid.UUID,
+    ) -> BusinessAddressOrm | None:
+        return await self._session.scalar(
+            select(BusinessAddressOrm).where(
+                BusinessAddressOrm.business_id == business_id,
+                BusinessAddressOrm.deleted_at.is_(None),
+                BusinessAddressOrm.pickup_enabled.is_(True),
+            )
+        )

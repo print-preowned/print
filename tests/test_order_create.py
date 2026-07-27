@@ -12,8 +12,12 @@ from fastapi import HTTPException
 from app.order.model import OrderCreateRequest
 from app.order_item.model import OrderItemCreateRequest
 from app.order.service import OrderService
-from app.utility.address import FULFILLMENT_TYPE_DELIVERY, fulfillment_snapshot_from_user_address
-
+from app.utility.address import (
+    FULFILLMENT_TYPE_DELIVERY,
+    FULFILLMENT_TYPE_PICKUP,
+    fulfillment_snapshot_from_business_address,
+    fulfillment_snapshot_from_user_address,
+)
 
 def _address_row(**overrides):
     row = MagicMock()
@@ -39,6 +43,21 @@ class TestFulfillmentSnapshotHelper:
         assert snapshot["address_label"] == "Home"
         assert snapshot["line1"] == "12 Allen Avenue"
         assert snapshot["city"] == "Ikeja"
+
+    def test_maps_business_address_to_pickup_snapshot(self) -> None:
+        row = MagicMock()
+        row.label = "Main store"
+        row.phone_number = "+2348012345678"
+        row.line1 = "12 Allen Avenue"
+        row.line2 = None
+        row.city = "Ikeja"
+        row.state = "Lagos"
+        row.postal_code = None
+        row.country_code = "NG"
+        snapshot = fulfillment_snapshot_from_business_address(row)
+        assert snapshot["fulfillment_type"] == FULFILLMENT_TYPE_PICKUP
+        assert snapshot["recipient_name"] == ""
+        assert snapshot["address_label"] == "Main store"
 
 
 @pytest.mark.asyncio
@@ -307,3 +326,157 @@ async def test_order_create_rejects_mixed_business_cart() -> None:
         await service.create(payload, str(user_id))
     assert exc.value.status_code == 422
     assert exc.value.detail == "All items must be from the same seller"
+
+
+@pytest.mark.asyncio
+async def test_order_create_snapshots_pickup_location_and_seller() -> None:
+    user_id = uuid.uuid4()
+    business_id = uuid.uuid4()
+    location_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+
+    session = AsyncMock()
+    service = OrderService(session)
+    service._repo = AsyncMock()
+    service._item_repo = AsyncMock()
+    service._variant_repo = AsyncMock()
+    service._business_book_repo = AsyncMock()
+    service._business_repo = AsyncMock()
+    service._user_address_repo = AsyncMock()
+    service._business_address_repo = AsyncMock()
+
+    variant_id = uuid.uuid4()
+    variant = MagicMock()
+    variant.status = "ACTIVE"
+    variant.business_book_id = uuid.uuid4()
+    variant.currency = "NGN"
+    variant.stock = 5
+    variant.price = Decimal("10.00")
+    variant.discount = None
+
+    listing = MagicMock()
+    listing.status = "ACTIVE"
+    listing.business_id = business_id
+
+    business = MagicMock()
+    business.name = "Print Books Lagos"
+
+    location = MagicMock()
+    location.id = location_id
+    location.pickup_enabled = True
+    location.label = "Main store"
+    location.phone_number = "+2348012345678"
+    location.line1 = "12 Allen Avenue"
+    location.line2 = None
+    location.city = "Ikeja"
+    location.state = "Lagos"
+    location.postal_code = None
+    location.country_code = "NG"
+
+    order_row = MagicMock()
+    order_row.id = order_id
+    order_row.user_id = user_id
+    order_row.reference = "PRT-PICKUP"
+    order_row.currency = "NGN"
+    order_row.total_amount = Decimal("10.00")
+    order_row.status = "PLACED"
+    order_row.business_id = business_id
+    order_row.business_name = "Print Books Lagos"
+    order_row.fulfillment_type = FULFILLMENT_TYPE_PICKUP
+    order_row.recipient_name = ""
+    order_row.address_label = "Main store"
+    order_row.phone_number = location.phone_number
+    order_row.line1 = location.line1
+    order_row.line2 = location.line2
+    order_row.city = location.city
+    order_row.state = location.state
+    order_row.postal_code = location.postal_code
+    order_row.country_code = location.country_code
+    order_row.created_at = MagicMock()
+    order_row.updated_at = MagicMock()
+
+    service._variant_repo.read_variant_by_id = AsyncMock(return_value=variant)
+    service._business_book_repo.read_business_book_by_id = AsyncMock(return_value=listing)
+    service._business_repo.read_by_id = AsyncMock(return_value=business)
+    service._business_address_repo.read_by_id = AsyncMock(return_value=location)
+    service._business_address_repo.read_pickup_location_by_business = AsyncMock(
+        return_value=location
+    )
+    service._repo.create_order = AsyncMock(return_value=order_row)
+    service._variant_repo.deduct_stock = AsyncMock(return_value=True)
+    service._item_repo.create_order_item = AsyncMock(return_value=MagicMock())
+    service._repo.list_customer_order_items = AsyncMock(return_value=[])
+
+    payload = OrderCreateRequest(
+        reference="PRT-PICKUP",
+        total_amount=10.0,
+        fulfillment_type="PICKUP",
+        pickup_location_id=str(location_id),
+        items=[
+            OrderItemCreateRequest(
+                variant_id=str(variant_id),
+                quantity=1,
+                unit_price=10.0,
+            )
+        ],
+    )
+
+    response = await service.create(payload, str(user_id))
+
+    create_call = service._repo.create_order.await_args.args[0]
+    assert create_call.fulfillment_type == FULFILLMENT_TYPE_PICKUP
+    assert create_call.line1 == "12 Allen Avenue"
+    assert create_call.address_label == "Main store"
+    assert response.data.fulfillment_address is not None
+    assert response.data.fulfillment_address.fulfillment_type == FULFILLMENT_TYPE_PICKUP
+
+
+@pytest.mark.asyncio
+async def test_order_create_rejects_invalid_pickup_location() -> None:
+    user_id = uuid.uuid4()
+    business_id = uuid.uuid4()
+    location_id = uuid.uuid4()
+
+    session = AsyncMock()
+    service = OrderService(session)
+    service._variant_repo = AsyncMock()
+    service._business_book_repo = AsyncMock()
+    service._business_repo = AsyncMock()
+    service._business_address_repo = AsyncMock()
+
+    variant_id = uuid.uuid4()
+    variant = MagicMock()
+    variant.status = "ACTIVE"
+    variant.business_book_id = uuid.uuid4()
+    variant.currency = "NGN"
+    variant.stock = 5
+    variant.price = Decimal("10.00")
+    variant.discount = None
+
+    listing = MagicMock()
+    listing.status = "ACTIVE"
+    listing.business_id = business_id
+
+    service._variant_repo.read_variant_by_id = AsyncMock(return_value=variant)
+    service._business_book_repo.read_business_book_by_id = AsyncMock(return_value=listing)
+    service._business_repo.read_by_id = AsyncMock(return_value=MagicMock(name="Seller"))
+    service._business_address_repo.read_by_id = AsyncMock(return_value=None)
+
+    payload = OrderCreateRequest(
+        reference="PRT-PICKUP-2",
+        total_amount=10.0,
+        fulfillment_type="PICKUP",
+        pickup_location_id=str(location_id),
+        items=[
+            OrderItemCreateRequest(
+                variant_id=str(variant_id),
+                quantity=1,
+                unit_price=10.0,
+            )
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await service.create(payload, str(user_id))
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "Pickup location not found"

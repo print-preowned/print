@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from app.business_address.model import BusinessAddressCreateRequest, BusinessAddressUpdateRequest
 from app.business_address.schemas import BusinessAddressRead
 from app.business_address.service import ReadableBusinessAddressService, WritableBusinessAddressService
-from app.utility.authorization import TokenPayload, get_business_id, require_privilege
+from app.utility.authorization import TokenPayload, get_business_id, require_context, require_privilege
 from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
 
 router = APIRouter(prefix="/business-addresses", tags=["business-addresses"])
+customer_router = APIRouter(prefix="/businesses/{business_id}/pickup-location", tags=["pickup-location"])
 
 
 def _business_id(token: TokenPayload) -> str:
@@ -72,3 +73,12 @@ async def set_primary(
     service: WritableBusinessAddressService = Depends(),
 ) -> Response:
     return await service.set_primary(id, _business_id(token))
+
+
+@customer_router.get("")
+async def read_pickup_location(
+    business_id: str,
+    token: TokenPayload = Depends(require_context("CUSTOMER")),
+    service: ReadableBusinessAddressService = Depends(),
+) -> BaseResponse[BusinessAddressRead]:
+    return await service.read_pickup_location_for_customer(business_id)
