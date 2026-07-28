@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, Response
 from app.user.model import UserUpdateRequest
 from app.user.schemas import UserRead
 from app.user.service import ReadableUserService, WritableUserService
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 
 router = APIRouter(prefix="/users", tags=["UserController"])
 
@@ -27,13 +28,10 @@ async def delete(
 
 @router.get("")
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     service: ReadableUserService = Depends(),
 ) -> PaginatedResponse[UserRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    return await service.read(params)
 
 
 @router.get("/by-role/{role_id}")

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -9,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.book_rating.model import BookRatingCreateRequest, BookRatingUpdateRequest
 from app.book_rating.repository import BookRatingRepository
 from app.book_rating.schemas import BookRatingCreate, BookRatingRead, BookRatingUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -60,26 +60,11 @@ class BookRatingService:
             raise HTTPException(status_code=404, detail="Rating not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[BookRatingRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[BookRatingRead]:
         total_results = await self._repo.count_book_ratings()
-        rows = await self._repo.list_book_ratings(offset=offset, limit=size)
+        rows = await self._repo.list_book_ratings(offset=params.offset, limit=params.size)
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[BookRatingRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[BookRatingRead]:
         parsed_id = _parse_id(id)

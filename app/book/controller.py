@@ -13,7 +13,8 @@ from app.utility.authorization import (
     require_privilege,
     require_privilege_and_owner,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -57,13 +58,10 @@ async def read_upload_url(
 
 @router.get("", tags=["client"])
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     service: ReadableBookService = Depends(),
 ) -> PaginatedResponse[BookReadResponse]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    return await service.read(params)
 
 
 @router.get("/{id}", tags=["client"])

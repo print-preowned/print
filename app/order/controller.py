@@ -4,7 +4,8 @@ from app.order.model import OrderCreateRequest, OrderStatusUpdateRequest
 from app.order.schemas import BusinessOrderDetailRead, OrderDetailRead, OrderSummaryRead
 from app.order.service import ReadableOrderService, WritableOrderService
 from app.utility.authorization import TokenPayload, get_business_id, require_context, require_privilege
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params, pagination_params_with
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 business_router = APIRouter(prefix="/business-orders", tags=["business-orders"])
@@ -28,14 +29,11 @@ async def create(
 
 @router.get("")
 async def read_for_customer(
-    page: int = 1,
-    size: int = 10,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params),
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: ReadableOrderService = Depends(),
 ) -> PaginatedResponse[OrderSummaryRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read_for_customer(token.sub, param)
+    return await service.read_for_customer(token.sub, params)
 
 
 @router.get("/{id}")
@@ -58,14 +56,11 @@ async def cancel_by_customer(
 
 @business_router.get("")
 async def read_for_business(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     token: TokenPayload = Depends(require_privilege("READ_ORDER")),
     service: ReadableOrderService = Depends(),
 ) -> PaginatedResponse[OrderSummaryRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read_for_business(_business_id(token), param)
+    return await service.read_for_business(_business_id(token), params)
 
 
 @business_router.get("/{id}")

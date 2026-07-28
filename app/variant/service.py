@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 from decimal import Decimal
 
@@ -10,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.book.repository import BookRepository
 from app.business.repository import BusinessRepository
 from app.business_book.repository import BusinessBookRepository
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 from app.variant.model import VariantCreateRequest, VariantUpdateRequest
 from app.variant.repository import VariantRepository, effective_price
@@ -143,53 +143,27 @@ class VariantService:
             raise HTTPException(status_code=404, detail="Variant not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[VariantRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
+    async def read(self, params: PaginationParams) -> PaginatedResponse[VariantRead]:
         total_results = await self._repo.count_variants()
-        rows = await self._repo.list_variants(offset=offset, limit=size)
-        return PaginatedResponse[VariantRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=math.ceil(total_results / size) if size else 1,
-                total_results=total_results,
-            ),
-        )
+        rows = await self._repo.list_variants(offset=params.offset, limit=params.size)
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_scoped(
         self,
         business_book_id: str,
-        params: ParamRequest,
+        params: PaginationParams,
         business_id: str,
     ) -> PaginatedResponse[VariantWithConfigRead]:
         await self._assert_business_book_owned(business_book_id, business_id)
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
         parsed_bb_id = _parse_id(business_book_id)
         total_results = await self._repo.count_variants(business_book_id=parsed_bb_id)
         rows = await self._repo.list_variants(
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             business_book_id=parsed_bb_id,
         )
         config_map = await self._repo.resolve_configs_for_variants([row.id for row in rows])
-        return PaginatedResponse[VariantWithConfigRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_variant_with_config(row, config_map.get(row.id, [])) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=math.ceil(total_results / size) if size else 1,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response([_to_variant_with_config(row, config_map.get(row.id, [])) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[VariantRead]:
         row = await self._repo.read_variant_by_id(_parse_id(id))
@@ -210,12 +184,9 @@ class VariantService:
 
     async def read_public_catalog(
         self,
-        params: ParamRequest,
+        params: PaginationParams,
         book_id: str | None = None,
     ) -> PaginatedResponse[PublicCatalogVariantRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
         parsed_book_id = _parse_id(book_id) if book_id else None
 
         total_results = await self._repo.count_variants(
@@ -223,8 +194,8 @@ class VariantService:
             book_id=parsed_book_id,
         )
         rows = await self._repo.list_variants(
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             active_catalog_only=True,
             book_id=parsed_book_id,
         )
@@ -266,17 +237,7 @@ class VariantService:
                         config=config_map.get(row.id, []),
                     )
                 )
-        return PaginatedResponse[PublicCatalogVariantRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=math.ceil(total_results / size) if size else 1,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_public_catalog_by_id(self, id: str) -> BaseResponse[PublicCatalogVariantRead]:
         row = await self._repo.read_variant_by_id(_parse_id(id))

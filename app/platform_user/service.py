@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Request, Response
@@ -29,7 +28,8 @@ from app.user.model import LoginRequest, LoginResponse
 from app.user.repository import UserRepository
 from app.user.schemas import UserSignup
 from app.user.service import UserService
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -204,28 +204,13 @@ class PlatformUserService:
             data=await self._populate_platform_user_with_user(platform_user),
         )
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[PlatformUserWithUser]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[PlatformUserWithUser]:
         total_results = await self._repo.count_platform_users()
-        rows = await self._repo.list_platform_users(offset=offset, limit=size)
+        rows = await self._repo.list_platform_users(offset=params.offset, limit=params.size)
         platform_users = [_to_read(row) for row in rows]
 
         if not platform_users:
-            total_pages = math.ceil(total_results / size) if size else 1
-            return PaginatedResponse[PlatformUserWithUser](
-                status_code=200,
-                message="Successful",
-                data=[],
-                pagination=Pagination(
-                    page=page,
-                    size=size,
-                    total_pages=total_pages,
-                    total_results=total_results,
-                ),
-            )
+            return paginated_response([], total_results, params)
 
         user_ids = [str(pu.user_id) for pu in platform_users]
         privilege_set_ids = list({str(pu.platform_privilege_set_id) for pu in platform_users})
@@ -262,18 +247,7 @@ class PlatformUserService:
                 )
             )
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[PlatformUserWithUser](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformUserRead]:
         row = await self._repo.read_platform_user_by_id(_parse_id(id))

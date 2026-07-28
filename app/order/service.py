@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 from decimal import Decimal
 
@@ -40,7 +39,8 @@ from app.utility.address import (
 from app.order_item.repository import OrderItemRepository
 from app.order_item.schemas import OrderItemRead
 from app.order_item.service import build_order_item_create
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 from app.variant.repository import VariantRepository, effective_price_decimal
 
@@ -350,27 +350,12 @@ class OrderService:
             raise HTTPException(status_code=404, detail="Order not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[OrderRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[OrderRead]:
         total_results = await self._repo.count_orders()
-        rows = await self._repo.list_orders(offset=offset, limit=size)
+        rows = await self._repo.list_orders(offset=params.offset, limit=params.size)
         data = [_to_read(row) for row in rows]
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[OrderRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_by_id(self, id: str, user_id: str | None = None) -> BaseResponse[OrderDetailRead]:
         parsed_id = _parse_id(id)
@@ -387,21 +372,18 @@ class OrderService:
         )
 
     async def read_for_customer(
-        self, user_id: str, params: ParamRequest
+        self, user_id: str, params: PaginationParams
     ) -> PaginatedResponse[OrderSummaryRead]:
         parsed_user_id = _parse_id(user_id)
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-        search = (params.search or "").strip() or None
+        search = params.normalized_search()
 
         total_results = await self._repo.count_orders_for_user(
             parsed_user_id, search=search
         )
         rows = await self._repo.list_orders_for_user(
             parsed_user_id,
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             search=search,
         )
         item_counts = await self._repo.item_counts_for_orders([row.id for row in rows])
@@ -424,35 +406,21 @@ class OrderService:
             for row in rows
         ]
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[OrderSummaryRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_for_business(
-        self, business_id: str, params: ParamRequest
+        self, business_id: str, params: PaginationParams
     ) -> PaginatedResponse[OrderSummaryRead]:
         parsed_business_id = _parse_id(business_id)
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-        search = (params.search or "").strip() or None
+        search = params.normalized_search()
 
         total_results = await self._repo.count_orders_for_business(
             parsed_business_id, search=search
         )
         rows = await self._repo.list_orders_for_business(
             parsed_business_id,
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             search=search,
         )
         totals = await self._repo.business_totals_for_orders(
@@ -475,18 +443,7 @@ class OrderService:
                 )
             )
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[OrderSummaryRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_by_id_for_business(
         self, id: str, business_id: str

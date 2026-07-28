@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -22,7 +21,8 @@ from app.business_book.model import (
 )
 from app.business_book.repository import BusinessBookRepository
 from app.business_book.schemas import BusinessBookCreate, BusinessBookRead, BusinessBookUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 from app.variant.model import VariantWithConfig
 from app.variant.repository import VariantRepository, effective_price
@@ -122,41 +122,23 @@ class BusinessBookService:
             raise HTTPException(status_code=404, detail="BusinessBook not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[BusinessBookRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[BusinessBookRead]:
         total_results = await self._repo.count_business_books()
-        rows = await self._repo.list_business_books(offset=offset, limit=size)
+        rows = await self._repo.list_business_books(offset=params.offset, limit=params.size)
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[BusinessBookRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_business_id(
         self,
         business_id: str,
-        params: ParamRequest,
+        params: PaginationParams,
     ) -> PaginatedResponse[BusinessBookWithVariantSummary]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
         parsed_business_id = _parse_id(business_id)
 
         total_results = await self._repo.count_business_books(business_id=parsed_business_id)
         rows = await self._repo.list_business_books(
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             business_id=parsed_business_id,
         )
         bb_ids = [row.id for row in rows]
@@ -179,18 +161,7 @@ class BusinessBookService:
                 )
             )
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[BusinessBookWithVariantSummary](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_by_id(
         self,
@@ -349,17 +320,14 @@ class BusinessBookService:
 
     async def read_public_catalog(
         self,
-        params: ParamRequest,
+        params: PaginationParams,
         *,
         book_id: str | None = None,
         exclude_id: str | None = None,
     ) -> PaginatedResponse[PublicCatalogBusinessBookRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
         parsed_book_id = _parse_id(book_id) if book_id else None
         parsed_exclude_id = _parse_id(exclude_id) if exclude_id else None
-        search = (params.search or "").strip() or None
+        search = params.normalized_search()
 
         total_results = await self._repo.count_public_catalog(
             book_id=parsed_book_id,
@@ -367,26 +335,15 @@ class BusinessBookService:
             search=search,
         )
         rows = await self._repo.list_public_catalog(
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             book_id=parsed_book_id,
             exclude_id=parsed_exclude_id,
             search=search,
         )
         data = await self._to_public_catalog_reads(rows)
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[PublicCatalogBusinessBookRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_public_by_id(self, id: str) -> BaseResponse[PublicCatalogBusinessBookDetail]:
         parsed_id = _parse_id(id)

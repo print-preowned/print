@@ -10,7 +10,8 @@ from app.platform_privilege_set_privilege.service import (
     WritablePlatformPrivilegeSetPrivilegeService,
 )
 from app.utility.authorization import TokenPayload, require_privilege
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params
 
 router = APIRouter(
     prefix="/admin/privilege-set-privileges",
@@ -60,7 +61,7 @@ async def delete(
 
 @router.get("", status_code=200, tags=["platform"])
 async def read(
-    params: ParamRequest = Depends(),
+    params: PaginationParams = Depends(pagination_params),
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_PRIVILEGE_SETS")),
     service: ReadablePlatformPrivilegeSetPrivilegeService = Depends(),
 ) -> PaginatedResponse[PlatformPrivilegeSetPrivilege]:

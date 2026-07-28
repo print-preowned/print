@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Response
 
 from app.utility.authorization import TokenPayload, require_privilege
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 from app.variant_type.model import VariantTypeCreateRequest, VariantTypeUpdateRequest
 from app.variant_type.schemas import ProductOptionRead
 from app.variant_type.service import ReadableVariantTypeService, WritableVariantTypeService
@@ -39,14 +40,11 @@ async def delete(
 
 @router.get("")
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     token: TokenPayload = Depends(require_privilege("READ_VARIANT_TYPE")),
     service: ReadableVariantTypeService = Depends(),
 ) -> PaginatedResponse[ProductOptionRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    return await service.read(params)
 
 
 @router.get("/{id}")

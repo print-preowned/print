@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -18,7 +17,8 @@ from app.platform_privilege_set.schemas import (
     PlatformPrivilegeSetUpdate,
 )
 from app.platform_user.guards import SUPER_ADMIN_SET_NAME
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -66,33 +66,19 @@ class PlatformPrivilegeSetService:
             raise HTTPException(status_code=404, detail="Platform privilege set not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[PlatformPrivilegeSet]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
+    async def read(self, params: PaginationParams) -> PaginatedResponse[PlatformPrivilegeSet]:
         exclude_names = [SUPER_ADMIN_SET_NAME]
 
         total_results = await self._repo.count_platform_privilege_sets(
             exclude_names=exclude_names,
         )
         rows = await self._repo.list_platform_privilege_sets(
-            offset=offset,
-            limit=size,
+            offset=params.offset,
+            limit=params.size,
             exclude_names=exclude_names,
         )
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[PlatformPrivilegeSet](
-            status_code=200,
-            message="Successful",
-            data=[_to_response(_to_read(row)) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response([_to_response(_to_read(row)) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformPrivilegeSet]:
         row = await self._repo.read_platform_privilege_set_by_id(_parse_id(id))

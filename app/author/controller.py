@@ -4,7 +4,8 @@ from app.author.model import AuthorCreateRequest, AuthorUpdateRequest
 from app.author.schemas import AuthorRead
 from app.author.service import ReadableAuthorService, WritableAuthorService
 from app.utility.authorization import TokenPayload, require_context, require_privilege
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 
 router = APIRouter(prefix="/authors", tags=["authors"])
 
@@ -30,13 +31,10 @@ async def update(
 
 @router.get("", tags=["client"])
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     service: ReadableAuthorService = Depends(),
 ) -> PaginatedResponse[AuthorRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    return await service.read(params)
 
 
 @router.get("/{id}", tags=["client"])

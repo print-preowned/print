@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Response
 
 from app.platform_invite.model import (
-    PlatformInvite,
     PlatformInviteAcceptRequest,
     PlatformInviteCreateRequest,
     PlatformInviteRejectRequest,
@@ -9,9 +8,11 @@ from app.platform_invite.model import (
     PlatformInviteValidateResponse,
     PlatformInviteWithPrivilegeSet,
 )
+from app.platform_invite.schemas import PlatformInviteRead
 from app.platform_invite.service import ReadablePlatformInviteService, WritablePlatformInviteService
 from app.utility.authorization import TokenPayload, require_privilege
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params
 
 router = APIRouter(prefix="/admin/invites", tags=["admin-invites"])
 
@@ -112,7 +113,7 @@ async def reject(
 
 @router.get("", status_code=200, tags=["platform"])
 async def read(
-    params: ParamRequest = Depends(),
+    params: PaginationParams = Depends(pagination_params),
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),
     service: ReadablePlatformInviteService = Depends(),
 ) -> PaginatedResponse[PlatformInviteWithPrivilegeSet]:
@@ -128,7 +129,7 @@ async def read_by_id(
     id: str,
     token: TokenPayload = Depends(require_privilege("MANAGE_PLATFORM_USERS")),
     service: ReadablePlatformInviteService = Depends(),
-) -> BaseResponse[PlatformInvite]:
+) -> BaseResponse[PlatformInviteRead]:
     """
     Read a platform invite by ID
     Requires PLATFORM context and MANAGE_PLATFORM_USERS privilege

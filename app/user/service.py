@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Request, Response
@@ -26,7 +25,8 @@ from app.user.orm import UserOrm
 from app.user.repository import UserRepository
 from app.user.schemas import UserRead, UserSignup, UserUpdate
 from app.utility.authorization import TokenPayload
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.redis import set_key
 from app.utility.service_deps import readable_service, writable_service
 from app.utility.token import create_business_token, create_customer_token, create_platform_token
@@ -163,26 +163,11 @@ class UserService:
             raise HTTPException(status_code=404, detail="User not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[UserRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[UserRead]:
         total_results = await self._repo.count_users()
-        rows = await self._repo.list_users(offset=offset, limit=size)
+        rows = await self._repo.list_users(offset=params.offset, limit=params.size)
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[UserRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[UserRead]:
         parsed_id = _parse_user_id(id)

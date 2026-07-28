@@ -5,7 +5,8 @@ from app.utility.authorization import (
     TokenPayload,
     get_optional_token_payload,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 from app.variant.schemas import PublicCatalogVariantRead, VariantRead
 from app.variant.service import ReadableVariantService
 
@@ -25,19 +26,16 @@ def _assert_platform_read_variant(token: TokenPayload) -> None:
 
 @router.get("")
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     book_id: str | None = None,
     token: TokenPayload | None = Depends(get_optional_token_payload),
     service: ReadableVariantService = Depends(),
 ) -> PaginatedResponse[VariantRead] | PaginatedResponse[PublicCatalogVariantRead]:
-    param = ParamRequest(page=page, size=size, search=search)
     if token is None or token.ctx in ("CUSTOMER", "BUSINESS"):
-        return await service.read_public_catalog(param, book_id=book_id)
+        return await service.read_public_catalog(params, book_id=book_id)
     if token.ctx == "PLATFORM":
         _assert_platform_read_variant(token)
-        return await service.read(param)
+        return await service.read(params)
     raise HTTPException(status_code=403, detail="Unsupported context for variant catalog")
 
 

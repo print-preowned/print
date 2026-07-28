@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -14,7 +13,8 @@ from app.utility.address import (
     normalize_whitespace,
     validate_nigeria_address_fields,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -175,27 +175,11 @@ class UserAddressService:
             raise HTTPException(status_code=404, detail="Address not found")
         return Response(status_code=204)
 
-    async def read(self, user_id: str, params: ParamRequest) -> PaginatedResponse[UserAddressRead]:
+    async def read(self, user_id: str, params: PaginationParams) -> PaginatedResponse[UserAddressRead]:
         parsed_user_id = _parse_user_id(user_id)
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
         total_results = await self._repo.count_active_by_user(parsed_user_id)
-        rows = await self._repo.list_by_user(parsed_user_id, offset=offset, limit=size)
-        total_pages = math.ceil(total_results / size) if size else 1
-
-        return PaginatedResponse[UserAddressRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        rows = await self._repo.list_by_user(parsed_user_id, offset=params.offset, limit=params.size)
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, address_id: str, user_id: str) -> BaseResponse[UserAddressRead]:
         parsed_id = _parse_id(address_id)

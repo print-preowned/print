@@ -4,7 +4,8 @@ from app.business_address.model import BusinessAddressCreateRequest, BusinessAdd
 from app.business_address.schemas import BusinessAddressRead
 from app.business_address.service import ReadableBusinessAddressService, WritableBusinessAddressService
 from app.utility.authorization import TokenPayload, get_business_id, require_context, require_privilege
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params
 
 router = APIRouter(prefix="/business-addresses", tags=["business-addresses"])
 customer_router = APIRouter(prefix="/businesses/{business_id}/pickup-location", tags=["pickup-location"])
@@ -19,14 +20,11 @@ def _business_id(token: TokenPayload) -> str:
 
 @router.get("")
 async def read_for_business(
-    page: int = 1,
-    size: int = 10,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params),
     token: TokenPayload = Depends(require_privilege("READ_BUSINESS")),
     service: ReadableBusinessAddressService = Depends(),
 ) -> PaginatedResponse[BusinessAddressRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(_business_id(token), param)
+    return await service.read(_business_id(token), params)
 
 
 @router.post("", status_code=201)

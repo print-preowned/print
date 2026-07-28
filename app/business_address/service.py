@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -18,7 +17,8 @@ from app.utility.address import (
     normalize_whitespace,
     validate_nigeria_address_fields,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -192,28 +192,12 @@ class BusinessAddressService:
     async def read(
         self,
         business_id: str,
-        params: ParamRequest,
+        params: PaginationParams,
     ) -> PaginatedResponse[BusinessAddressRead]:
         parsed_business_id = _parse_business_id(business_id)
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
         total_results = await self._repo.count_active_by_business(parsed_business_id)
-        rows = await self._repo.list_by_business(parsed_business_id, offset=offset, limit=size)
-        total_pages = math.ceil(total_results / size) if size else 1
-
-        return PaginatedResponse[BusinessAddressRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        rows = await self._repo.list_by_business(parsed_business_id, offset=params.offset, limit=params.size)
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, address_id: str, business_id: str) -> BaseResponse[BusinessAddressRead]:
         parsed_id = _parse_id(address_id)

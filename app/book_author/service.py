@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -9,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.book_author.model import BookAuthorCreateRequest, BookAuthorUpdateRequest
 from app.book_author.repository import BookAuthorRepository
 from app.book_author.schemas import BookAuthorCreate, BookAuthorRead, BookAuthorUpdate
-from app.utility.model import BaseFilter, BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -69,27 +69,12 @@ class BookAuthorService:
         return Response(status_code=204)
 
     async def read(
-        self, params: ParamRequest[BaseFilter]
+        self, params: PaginationParams
     ) -> PaginatedResponse[BookAuthorRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
         total_results = await self._repo.count_book_authors()
-        rows = await self._repo.list_book_authors(offset=offset, limit=size)
+        rows = await self._repo.list_book_authors(offset=params.offset, limit=params.size)
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[BookAuthorRead](
-            status_code=200,
-            message="Successful",
-            data=[_to_read(row) for row in rows],
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[BookAuthorRead]:
         parsed_id = _parse_id(id)

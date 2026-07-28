@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 from collections import defaultdict
 
@@ -36,7 +35,8 @@ from app.utility.aws.s3 import (
     staging_key_from_image,
     staging_object_key,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -241,27 +241,12 @@ class BookService:
 
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[BookReadResponse]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[BookReadResponse]:
         total_results = await self._repo.count_books()
-        rows = await self._repo.list_books(offset=offset, limit=size)
+        rows = await self._repo.list_books(offset=params.offset, limit=params.size)
         books = [BookRead.model_validate(row) for row in rows]
-        pagination = Pagination(
-            page=page,
-            size=size,
-            total_pages=math.ceil(total_results / size) if size else 1,
-            total_results=total_results,
-        )
         if not books:
-            return PaginatedResponse[BookReadResponse](
-                status_code=200,
-                message="Successful",
-                data=[],
-                pagination=pagination,
-            )
+            return paginated_response([], total_results, params)
 
         book_ids = [str(b.id) for b in books]
         author_links = await self._book_author_repo.read_by_book_ids(
@@ -311,12 +296,7 @@ class BookService:
             ]
             data.append(_to_book_read_response(book, author_refs, genre_refs))
 
-        return PaginatedResponse[BookReadResponse](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=pagination,
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[BookReadResponse]:
         parsed_id = uuid.UUID(id)

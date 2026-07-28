@@ -15,7 +15,8 @@ from app.utility.authorization import (
     get_optional_token_payload,
     require_privilege,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 from app.variant.model import VariantCreateRequest, VariantUpdateRequest
 from app.variant.schemas import VariantWithConfigRead
 from app.variant.service import ReadableVariantService, WritableVariantService
@@ -71,9 +72,7 @@ async def delete(
 
 @router.get("", tags=["client"])
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     book_id: str | None = None,
     exclude_id: str | None = None,
     mine: bool = False,
@@ -83,11 +82,10 @@ async def read(
     PaginatedResponse[BusinessBookWithVariantSummary]
     | PaginatedResponse[PublicCatalogBusinessBookRead]
 ):
-    param = ParamRequest(page=page, size=size, search=search)
     if mine:
         business_id = _assert_seller_inventory_access(token)
-        return await service.read_by_business_id(business_id, param)
-    return await service.read_public_catalog(param, book_id=book_id, exclude_id=exclude_id)
+        return await service.read_by_business_id(business_id, params)
+    return await service.read_public_catalog(params, book_id=book_id, exclude_id=exclude_id)
 
 
 @router.get("/{id}", tags=["client"])
@@ -110,13 +108,11 @@ async def read_by_id(
 @router.get("/{business_book_id}/variants", tags=["client"])
 async def read_variants(
     business_book_id: str,
-    page: int = 1,
-    size: int = 5,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     token: TokenPayload = Depends(require_privilege("READ_VARIANT")),
     service: ReadableVariantService = Depends(),
 ) -> PaginatedResponse[VariantWithConfigRead]:
-    param = ParamRequest(page=page, size=size)
-    return await service.read_scoped(business_book_id, param, _business_id(token))
+    return await service.read_scoped(business_book_id, params, _business_id(token))
 
 
 @router.post("/{business_book_id}/variants", status_code=201, tags=["client"])

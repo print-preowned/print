@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -11,7 +10,8 @@ from app.role.repository import RoleRepository
 from app.role.schemas import RoleCreate, RoleRead, RoleUpdate
 from app.role_privilege.model import RolePrivilegeCreateRequest
 from app.role_privilege.service import RolePrivilegeService
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -66,27 +66,10 @@ class RoleService:
             raise HTTPException(status_code=404, detail="Role not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[RoleRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[RoleRead]:
         total_results = await self._repo.count_roles()
-        rows = await self._repo.list_roles(offset=offset, limit=size)
-        data = [_to_read(row) for row in rows]
-
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[RoleRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        rows = await self._repo.list_roles(offset=params.offset, limit=params.size)
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[RoleRead]:
         parsed_id = _parse_id(id)

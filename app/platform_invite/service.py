@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -30,7 +29,8 @@ from app.user.model import SignupRequest
 from app.user.repository import UserRepository
 from app.user.schemas import UserSignup
 from app.utility.email import EmailDeliveryError, send_platform_invite_email
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 INVITE_EXPIRY_DAYS = 7
@@ -305,28 +305,13 @@ class PlatformInviteService:
         await self._repo.update_invite_status(_parse_id(str(invite.id)), "REJECTED")
         return Response(status_code=200)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[PlatformInviteWithPrivilegeSet]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[PlatformInviteWithPrivilegeSet]:
         total_results = await self._repo.count_platform_invites()
-        rows = await self._repo.list_platform_invites(offset=offset, limit=size)
+        rows = await self._repo.list_platform_invites(offset=params.offset, limit=params.size)
         invites = [_to_read(row) for row in rows]
 
         if not invites:
-            total_pages = math.ceil(total_results / size) if size else 1
-            return PaginatedResponse[PlatformInviteWithPrivilegeSet](
-                status_code=200,
-                message="Successful",
-                data=[],
-                pagination=Pagination(
-                    page=page,
-                    size=size,
-                    total_pages=total_pages,
-                    total_results=total_results,
-                ),
-            )
+            return paginated_response([], total_results, params)
 
         privilege_set_ids = list({str(inv.platform_privilege_set_id) for inv in invites})
         privilege_set_docs = await self._privilege_set_repo.read_platform_privilege_sets_by_ids(
@@ -345,18 +330,7 @@ class PlatformInviteService:
                 )
             )
 
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[PlatformInviteWithPrivilegeSet](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        return paginated_response(data, total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[PlatformInviteRead]:
         row = await self._repo.read_platform_invite_by_id(_parse_id(id))

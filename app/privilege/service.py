@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import uuid
 
 from fastapi import HTTPException, Response
@@ -9,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.privilege.model import PrivilegeCreateRequest, PrivilegeUpdateRequest
 from app.privilege.repository import PrivilegeRepository
 from app.privilege.schemas import PrivilegeCreate, PrivilegeRead, PrivilegeUpdate
-from app.utility.model import BaseResponse, PaginatedResponse, Pagination, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, paginated_response
 from app.utility.service_deps import readable_service, writable_service
 
 
@@ -53,27 +53,10 @@ class PrivilegeService:
             raise HTTPException(status_code=404, detail="Privilege not found")
         return Response(status_code=204)
 
-    async def read(self, params: ParamRequest) -> PaginatedResponse[PrivilegeRead]:
-        page = max(1, params.page)
-        size = params.size
-        offset = (page - 1) * size
-
+    async def read(self, params: PaginationParams) -> PaginatedResponse[PrivilegeRead]:
         total_results = await self._repo.count_privileges()
-        rows = await self._repo.list_privileges(offset=offset, limit=size)
-        data = [_to_read(row) for row in rows]
-
-        total_pages = math.ceil(total_results / size) if size else 1
-        return PaginatedResponse[PrivilegeRead](
-            status_code=200,
-            message="Successful",
-            data=data,
-            pagination=Pagination(
-                page=page,
-                size=size,
-                total_pages=total_pages,
-                total_results=total_results,
-            ),
-        )
+        rows = await self._repo.list_privileges(offset=params.offset, limit=params.size)
+        return paginated_response([_to_read(row) for row in rows], total_results, params)
 
     async def read_by_id(self, id: str) -> BaseResponse[PrivilegeRead]:
         parsed_id = _parse_id(id)

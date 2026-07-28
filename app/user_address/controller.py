@@ -4,21 +4,19 @@ from app.user_address.model import UserAddressCreateRequest, UserAddressUpdateRe
 from app.user_address.schemas import UserAddressRead
 from app.user_address.service import ReadableUserAddressService, WritableUserAddressService
 from app.utility.authorization import TokenPayload, require_context
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params
 
 router = APIRouter(prefix="/addresses", tags=["addresses"])
 
 
 @router.get("", tags=["client"])
 async def read_for_user(
-    page: int = 1,
-    size: int = 10,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params),
     token: TokenPayload = Depends(require_context("CUSTOMER")),
     service: ReadableUserAddressService = Depends(),
 ) -> PaginatedResponse[UserAddressRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(token.sub, param)
+    return await service.read(token.sub, params)
 
 
 @router.post("", status_code=201, tags=["client"])

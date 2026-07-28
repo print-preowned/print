@@ -10,7 +10,8 @@ from app.utility.authorization import (
     require_context,
     require_owner,
 )
-from app.utility.model import BaseResponse, PaginatedResponse, ParamRequest
+from app.utility.model import BaseResponse, PaginatedResponse
+from app.utility.pagination import PaginationParams, pagination_params_with
 
 router = APIRouter(prefix="/businesses", tags=["businesses"])
 
@@ -51,14 +52,11 @@ async def delete(
 
 @router.get("", tags=["client"])
 async def read(
-    page: int = 1,
-    size: int = 5,
-    search: str | None = None,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
     token: TokenPayload = Depends(require_context("BUSINESS")),
     service: ReadableBusinessService = Depends(),
 ) -> PaginatedResponse[BusinessRead]:
-    param = ParamRequest(page=page, size=size, search=search)
-    return await service.read(param)
+    return await service.read(params)
 
 
 @router.get("/me", tags=["client"])

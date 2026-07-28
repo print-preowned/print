@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Generic, List, Optional, TypeVar
+from typing import Any, Generic, List, TypeVar
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -32,20 +32,6 @@ class BaseAppModel(BaseModel):
         return len(self.__dict__)
 
 
-class BaseFilter(BaseModel):
-    search: Optional[str] = None
-    status: Optional[str] = None
-    created_from: Optional[str] = None
-    created_to: Optional[str] = None
-
-
-class ParamRequest(BaseModel, Generic[T]):
-    page: int
-    size: int
-    search: Optional[str] = None
-    filter: Optional[T | BaseFilter] = None
-
-
 class Pagination(BaseModel):
     page: int
     size: int
@@ -64,10 +50,5 @@ class BaseResponse(BaseModel, Generic[T]):
 class PaginatedResponse(BaseModel, Generic[T]):
     status_code: int
     message: str
-    data: List[T]
-    pagination: Pagination | None
-
-
-class PaginatedData(BaseModel, Generic[T]):
     data: List[T]
     pagination: Pagination | None
