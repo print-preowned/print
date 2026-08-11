@@ -12,7 +12,7 @@ PUBLIC_EXACT_PATHS = (
     "/authors",
     "/books",
     "/variants",
-    "/business-books",
+    "/offers",
 )
 
 PUBLIC_PATHS_PREFIX = (
@@ -24,7 +24,8 @@ PUBLIC_PATHS_PREFIX = (
     "/admin/invites/reject",
     "/books/",
     "/variants/",
-    "/business-books/",
+    "/businesses/",
+    "/offers/",
 )
 
 

@@ -12,7 +12,6 @@ from app.business_book.service import ReadableBusinessBookService, WritableBusin
 from app.utility.authorization import (
     TokenPayload,
     get_business_id,
-    get_optional_token_payload,
     require_privilege,
 )
 from app.utility.model import BaseResponse, PaginatedResponse
@@ -22,20 +21,10 @@ from app.variant.schemas import VariantWithConfigRead
 from app.variant.service import ReadableVariantService, WritableVariantService
 
 router = APIRouter(prefix="/business-books", tags=["business-books"])
+customer_router = APIRouter(tags=["public-catalog"])
 
 
 def _business_id(token: TokenPayload) -> str:
-    business_id = get_business_id(token)
-    if not business_id:
-        raise HTTPException(status_code=403, detail="Business context required")
-    return business_id
-
-
-def _assert_seller_inventory_access(token: TokenPayload | None) -> str:
-    if token is None or token.ctx != "BUSINESS":
-        raise HTTPException(status_code=403, detail="Business context required")
-    if "READ_BUSINESS_BOOK" not in token.privileges:
-        raise HTTPException(status_code=403, detail="User unauthorized to access this resource")
     business_id = get_business_id(token)
     if not business_id:
         raise HTTPException(status_code=403, detail="Business context required")
@@ -71,38 +60,52 @@ async def delete(
 
 
 @router.get("", tags=["client"])
-async def read(
+async def read_seller_inventory(
     params: PaginationParams = Depends(pagination_params_with(default_size=5)),
-    book_id: str | None = None,
-    exclude_id: str | None = None,
-    mine: bool = False,
-    token: TokenPayload | None = Depends(get_optional_token_payload),
+    token: TokenPayload = Depends(require_privilege("READ_BUSINESS_BOOK")),
     service: ReadableBusinessBookService = Depends(),
-) -> (
-    PaginatedResponse[BusinessBookWithVariantSummary]
-    | PaginatedResponse[PublicCatalogBusinessBookRead]
-):
-    if mine:
-        business_id = _assert_seller_inventory_access(token)
-        return await service.read_by_business_id(business_id, params)
-    return await service.read_public_catalog(params, book_id=book_id, exclude_id=exclude_id)
+) -> PaginatedResponse[BusinessBookWithVariantSummary]:
+    return await service.read_by_business_id(_business_id(token), params)
+
+
+@customer_router.get("/books/{book_id}/offers", tags=["client"])
+async def read_book_offers(
+    book_id: str,
+    params: PaginationParams = Depends(pagination_params_with(default_size=5)),
+    exclude_id: str | None = None,
+    service: ReadableBusinessBookService = Depends(),
+) -> PaginatedResponse[PublicCatalogBusinessBookRead]:
+    return await service.read_public_catalog(
+        params,
+        book_id=book_id,
+        exclude_id=exclude_id,
+    )
+
+
+@customer_router.get("/businesses/{business_id}/storefront/catalog", tags=["client"])
+async def read_storefront_catalog(
+    business_id: str,
+    params: PaginationParams = Depends(pagination_params_with(default_size=20)),
+    service: ReadableBusinessBookService = Depends(),
+) -> PaginatedResponse[PublicCatalogBusinessBookRead]:
+    return await service.read_public_store_catalog(business_id, params)
+
+
+@customer_router.get("/offers/{id}", tags=["client"])
+async def read_public_offer(
+    id: str,
+    service: ReadableBusinessBookService = Depends(),
+) -> BaseResponse[PublicCatalogBusinessBookDetail]:
+    return await service.read_public_by_id(id)
 
 
 @router.get("/{id}", tags=["client"])
 async def read_by_id(
     id: str,
-    token: TokenPayload | None = Depends(get_optional_token_payload),
+    token: TokenPayload = Depends(require_privilege("READ_BUSINESS_BOOK")),
     service: ReadableBusinessBookService = Depends(),
-) -> BaseResponse[BusinessBookWithVariants] | BaseResponse[PublicCatalogBusinessBookDetail]:
-    if token and token.ctx == "BUSINESS" and "READ_BUSINESS_BOOK" in token.privileges:
-        business_id = get_business_id(token)
-        if business_id:
-            try:
-                return await service.read_by_id(id, business_id)
-            except HTTPException as exc:
-                if exc.status_code not in (403, 404):
-                    raise
-    return await service.read_public_by_id(id)
+) -> BaseResponse[BusinessBookWithVariants]:
+    return await service.read_by_id(id, _business_id(token))
 
 
 @router.get("/{business_book_id}/variants", tags=["client"])

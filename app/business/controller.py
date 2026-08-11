@@ -1,6 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.business.model import BusinessCreateRequest, BusinessCreateResponse, BusinessDeleteResponse, BusinessUpdateRequest
+from app.business.model import (
+    BusinessCreateRequest,
+    BusinessCreateResponse,
+    BusinessDeleteResponse,
+    BusinessUpdateRequest,
+    PublicBusinessProfile,
+)
 from app.business.schemas import BusinessRead
 from app.business.service import ReadableBusinessService, WritableBusinessService
 from app.utility.authorization import (
@@ -65,6 +71,14 @@ async def read_by_user(
     service: ReadableBusinessService = Depends(),
 ) -> BaseResponse[BusinessRead | None]:
     return await service.read_by_user_id(token.sub)
+
+
+@router.get("/{id}/storefront", tags=["client"])
+async def read_storefront(
+    id: str,
+    service: ReadableBusinessService = Depends(),
+) -> BaseResponse[PublicBusinessProfile]:
+    return await service.read_public_profile(id)
 
 
 @router.get("/{id}", tags=["client"])

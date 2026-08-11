@@ -318,6 +318,34 @@ class BusinessBookService:
             )
         return items
 
+    async def _paginate_public_catalog(
+        self,
+        params: PaginationParams,
+        *,
+        book_id: uuid.UUID | None = None,
+        business_id: uuid.UUID | None = None,
+        exclude_id: uuid.UUID | None = None,
+    ) -> PaginatedResponse[PublicCatalogBusinessBookRead]:
+        search = params.normalized_search()
+
+        total_results = await self._repo.count_public_catalog(
+            book_id=book_id,
+            business_id=business_id,
+            exclude_id=exclude_id,
+            search=search,
+        )
+        rows = await self._repo.list_public_catalog(
+            offset=params.offset,
+            limit=params.size,
+            book_id=book_id,
+            business_id=business_id,
+            exclude_id=exclude_id,
+            search=search,
+        )
+        data = await self._to_public_catalog_reads(rows)
+
+        return paginated_response(data, total_results, params)
+
     async def read_public_catalog(
         self,
         params: PaginationParams,
@@ -327,23 +355,27 @@ class BusinessBookService:
     ) -> PaginatedResponse[PublicCatalogBusinessBookRead]:
         parsed_book_id = _parse_id(book_id) if book_id else None
         parsed_exclude_id = _parse_id(exclude_id) if exclude_id else None
-        search = params.normalized_search()
 
-        total_results = await self._repo.count_public_catalog(
+        return await self._paginate_public_catalog(
+            params,
             book_id=parsed_book_id,
             exclude_id=parsed_exclude_id,
-            search=search,
         )
-        rows = await self._repo.list_public_catalog(
-            offset=params.offset,
-            limit=params.size,
-            book_id=parsed_book_id,
-            exclude_id=parsed_exclude_id,
-            search=search,
-        )
-        data = await self._to_public_catalog_reads(rows)
 
-        return paginated_response(data, total_results, params)
+    async def read_public_store_catalog(
+        self,
+        business_id: str,
+        params: PaginationParams,
+    ) -> PaginatedResponse[PublicCatalogBusinessBookRead]:
+        parsed_business_id = _parse_id(business_id)
+        business = await self._business_repo.read_by_id(parsed_business_id)
+        if business is None or business.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Store not found")
+
+        return await self._paginate_public_catalog(
+            params,
+            business_id=parsed_business_id,
+        )
 
     async def read_public_by_id(self, id: str) -> BaseResponse[PublicCatalogBusinessBookDetail]:
         parsed_id = _parse_id(id)

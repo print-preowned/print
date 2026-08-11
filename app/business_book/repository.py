@@ -95,6 +95,7 @@ class BusinessBookRepository:
         self,
         *,
         book_id: uuid.UUID | None = None,
+        business_id: uuid.UUID | None = None,
         exclude_id: uuid.UUID | None = None,
         search: str | None = None,
     ) -> Select[tuple[BusinessBookOrm]]:
@@ -111,6 +112,8 @@ class BusinessBookRepository:
         )
         if book_id is not None:
             statement = statement.where(BusinessBookOrm.book_id == book_id)
+        if business_id is not None:
+            statement = statement.where(BusinessBookOrm.business_id == business_id)
         if exclude_id is not None:
             statement = statement.where(BusinessBookOrm.id != exclude_id)
         if search:
@@ -124,6 +127,7 @@ class BusinessBookRepository:
         self,
         *,
         book_id: uuid.UUID | None = None,
+        business_id: uuid.UUID | None = None,
         exclude_id: uuid.UUID | None = None,
         search: str | None = None,
     ) -> int:
@@ -140,6 +144,8 @@ class BusinessBookRepository:
         )
         if book_id is not None:
             statement = statement.where(BusinessBookOrm.book_id == book_id)
+        if business_id is not None:
+            statement = statement.where(BusinessBookOrm.business_id == business_id)
         if exclude_id is not None:
             statement = statement.where(BusinessBookOrm.id != exclude_id)
         if search:
@@ -156,12 +162,16 @@ class BusinessBookRepository:
         offset: int,
         limit: int,
         book_id: uuid.UUID | None = None,
+        business_id: uuid.UUID | None = None,
         exclude_id: uuid.UUID | None = None,
         search: str | None = None,
     ) -> list[BusinessBookOrm]:
         statement = (
             self._public_catalog_base(
-                book_id=book_id, exclude_id=exclude_id, search=search
+                book_id=book_id,
+                business_id=business_id,
+                exclude_id=exclude_id,
+                search=search,
             )
             .group_by(BusinessBookOrm.id)
             .order_by(BusinessBookOrm.created_at.desc())

@@ -44,3 +44,10 @@ class BusinessCreateResponse(BaseModel):
 
 class BusinessDeleteResponse(BaseModel):
     token: str
+
+
+class PublicBusinessProfile(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    logo: Optional[str] = None

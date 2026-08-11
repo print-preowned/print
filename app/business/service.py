@@ -12,6 +12,7 @@ from app.business.model import (
     BusinessCreateResponse,
     BusinessDeleteResponse,
     BusinessUpdateRequest,
+    PublicBusinessProfile,
 )
 from app.business.repository import BusinessRepository
 from app.business.schemas import BusinessCreate, BusinessRead, BusinessUpdate
@@ -169,6 +170,22 @@ class BusinessService:
             status_code=200,
             message="Successful",
             data=_to_read(row) if row else None,
+        )
+
+    async def read_public_profile(self, id: str) -> BaseResponse[PublicBusinessProfile]:
+        parsed_id = _parse_business_id(id)
+        row = await self._repo.read_by_id(parsed_id)
+        if row is None or row.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Store not found")
+        return BaseResponse[PublicBusinessProfile](
+            status_code=200,
+            message="Successful",
+            data=PublicBusinessProfile(
+                id=str(row.id),
+                name=row.name,
+                description=row.description,
+                logo=row.logo,
+            ),
         )
 
 
