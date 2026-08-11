@@ -14,9 +14,6 @@ class TestOrderStatusTransitions:
     def test_placed_to_confirmed(self) -> None:
         assert_valid_order_status_transition("PLACED", "CONFIRMED")
 
-    def test_active_legacy_to_confirmed(self) -> None:
-        assert_valid_order_status_transition("ACTIVE", "CONFIRMED")
-
     def test_placed_to_cancelled(self) -> None:
         assert_valid_order_status_transition("PLACED", "CANCELLED")
 

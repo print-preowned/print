@@ -6,6 +6,7 @@ from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.user_address.model import UserAddressCreateRequest, UserAddressUpdateRequest
+from app.user_address.orm import UserAddressOrm
 from app.user_address.repository import UserAddressRepository
 from app.user_address.schemas import UserAddressCreate, UserAddressRead, UserAddressUpdate
 from app.utility.address import (
@@ -29,7 +30,7 @@ def _parse_user_id(value: str) -> uuid.UUID:
     return uuid.UUID(value)
 
 
-def _to_read(row) -> UserAddressRead:
+def _to_read(row: UserAddressOrm) -> UserAddressRead:
     return UserAddressRead.model_validate(row)
 
 
@@ -70,7 +71,7 @@ class UserAddressService:
         fields = _validated_create_fields(payload)
         is_default = bool(fields.pop("is_default")) or active_count == 0
 
-        if is_default:
+        if is_default and active_count > 0:
             await self._repo.clear_default_for_user(parsed_user_id)
 
         row = await self._repo.create(

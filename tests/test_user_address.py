@@ -15,6 +15,28 @@ from app.user_address.service import UserAddressService
 from app.utility.address import validate_nigeria_address_fields, validate_phone_number
 
 
+def _address_row(user_id: uuid.UUID, **overrides: object) -> MagicMock:
+    row = MagicMock(spec=UserAddressOrm)
+    values = {
+        "id": uuid.uuid4(),
+        "user_id": user_id,
+        "label": "Home",
+        "recipient_name": "Jane Doe",
+        "phone_number": "+2348012345678",
+        "line1": "12 Allen Avenue",
+        "line2": None,
+        "city": "Ikeja",
+        "state": "Lagos",
+        "postal_code": None,
+        "country_code": "NG",
+        "is_default": True,
+        **overrides,
+    }
+    for key, value in values.items():
+        setattr(row, key, value)
+    return row
+
+
 class TestAddressValidation:
     def test_validate_nigeria_address_accepts_lagos(self) -> None:
         result = validate_nigeria_address_fields(
@@ -97,8 +119,7 @@ async def test_user_address_create_auto_defaults_first_address() -> None:
     service._repo = AsyncMock()
     service._repo.count_active_by_user = AsyncMock(return_value=0)
     service._repo.clear_default_for_user = AsyncMock()
-    created_row = MagicMock(spec=UserAddressOrm)
-    created_row.id = uuid.uuid4()
+    created_row = _address_row(user_id=user_id)
     service._repo.create = AsyncMock(return_value=created_row)
 
     payload = UserAddressCreateRequest(
@@ -164,19 +185,19 @@ async def test_user_address_update_merges_address_fields() -> None:
     service = UserAddressService(session)
     service._repo = AsyncMock()
 
-    row = MagicMock(spec=UserAddressOrm)
-    row.line1 = "12 Allen Avenue"
-    row.line2 = None
-    row.city = "Ikeja"
-    row.state = "Lagos"
-    row.postal_code = None
-    row.country_code = "NG"
-    row.phone_number = "08012345678"
-    row.recipient_name = "Jane Doe"
-    row.label = "Home"
+    row = _address_row(
+        id=address_id,
+        user_id=user_id,
+        phone_number="08012345678",
+    )
     service._repo.read_by_id = AsyncMock(return_value=row)
 
-    updated_row = MagicMock(spec=UserAddressOrm)
+    updated_row = _address_row(
+        id=address_id,
+        user_id=user_id,
+        city="Lekki",
+        phone_number="+2348012345678",
+    )
     service._repo.update = AsyncMock(return_value=updated_row)
 
     result = await service.update(
