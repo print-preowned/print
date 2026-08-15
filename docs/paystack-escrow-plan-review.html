@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Expert Review: Paystack Escrow Payment Flow Plan</title>
+  <style>
+    @page { margin: 2cm; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.55;
+      color: #1a1a1a;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 1.5cm;
+    }
+    h1 { font-size: 22pt; border-bottom: 2px solid #333; padding-bottom: 0.3em; margin-top: 0; }
+    h2 { font-size: 14pt; margin-top: 1.6em; color: #111; border-bottom: 1px solid #ccc; padding-bottom: 0.2em; }
+    h3 { font-size: 12pt; margin-top: 1.2em; color: #333; }
+    p { margin: 0.6em 0; }
+    ul, ol { margin: 0.5em 0; padding-left: 1.4em; }
+    li { margin: 0.35em 0; }
+    strong { font-weight: 600; }
+    code {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+      font-size: 9.5pt;
+      background: #f4f4f4;
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+      font-size: 9pt;
+      background: #f8f8f8;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 0.8em 1em;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1em 0;
+      font-size: 10pt;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.45em 0.6em;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f0f0f0; font-weight: 600; }
+    .meta { color: #555; font-size: 10pt; margin-bottom: 1.5em; }
+    .verdict { background: #f9f9f9; border-left: 4px solid #333; padding: 0.8em 1em; margin: 1em 0; }
+    .blocker { margin: 1em 0; }
+    .blocker h3 { color: #8b0000; margin-bottom: 0.3em; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }
+    .footer { margin-top: 2em; font-size: 9pt; color: #666; border-top: 1px solid #ddd; padding-top: 1em; }
+  </style>
+</head>
+<body>
+
+<h1>Expert Review: Paystack Escrow Payment Flow Plan</h1>
+
+<p class="meta">
+  <strong>Document reviewed:</strong> paystack_escrow_payment_flow_90eebd79.plan.md<br />
+  <strong>Review date:</strong> 12 August 2026<br />
+  <strong>Scope:</strong> Backend (<code>/Users/naj/Documents/print</code>) and frontend (<code>/Users/naj/Documents/print-web</code>)
+</p>
+
+<div class="verdict">
+  <h2 style="margin-top:0;border:none;padding:0;">Verdict</h2>
+  <p>The plan is <strong>structurally sound</strong> — separating payment state from fulfillment state, moving stock deduction to payment confirmation, storing webhook events for idempotency, and marking release only on <code>transfer.success</code> are all the right instincts, and they match how the codebase is actually laid out.</p>
+  <p>But it is <strong>not ready to implement</strong>. There are four issues that can lose real money or block launch outright, several concrete Paystack API errors that would fail on first contact, and one architectural omission (a ledger) that should be addressed before any money moves.</p>
+  <p><strong>The single most important thing:</strong> the plan treats “Paystack is not licensed escrow” as a <em>marketing copy problem</em>. It isn’t. It’s a flow-of-funds problem that determines the entire architecture, and it should be resolved before Phase 1.</p>
+</div>
+
+<h2>Four blockers</h2>
+
+<div class="blocker">
+  <h3>1. Flow of funds and the settlement schedule will break the design as written</h3>
+  <p>The plan holds customer money in the platform’s Paystack balance and transfers out later. Two problems:</p>
+  <ul>
+    <li><strong>Legally:</strong> a PSSP licence — which is what Paystack holds — explicitly does not authorise holding customer funds. The CBN has been actively fining for exactly this pattern. By collecting on behalf of sellers and disbursing, you are acting as an aggregator holding third-party funds commingled with your operating balance.</li>
+    <li><strong>Operationally:</strong> Paystack settles NGN to your bank account on T+1 by default. Your Paystack balance will be near zero when the release job runs, and every transfer will fail on insufficient balance. Nothing in the plan addresses funding the balance or switching to a manual settlement schedule.</li>
+  </ul>
+  <p>Paystack’s own answer to this is <strong>Connect / subaccounts with transaction splits</strong>, where the seller’s share is settled by Paystack directly to the seller and you never hold their money. With a <code>manual</code> settlement schedule on the subaccount, triggering settlement becomes your escrow release — most of the intended behaviour with dramatically less regulatory and treasury exposure. It costs some control over the exact N-day timing.</p>
+  <p><strong>Action:</strong> Resolve platform-hold vs Connect with Paystack account management before writing migrations. Building platform-hold and discovering later that Paystack won’t approve the flow means throwing away Phases 1, 2, and 4.</p>
+</div>
+
+<div class="blocker">
+  <h3>2. Deferring stock deduction to charge.success creates paid orders you cannot fulfill</h3>
+  <p>Today <code>_resolve_order_lines</code> checks stock and <code>_create_items</code> deducts it in the same request. Under the new design, two customers can both check out the last copy and both pay; one <code>charge.success</code> webhook arrives and <code>deduct_stock</code> returns <code>False</code>. You have taken money for an order that cannot ship.</p>
+  <p>The plan must pick a resolution explicitly:</p>
+  <ul>
+    <li><strong>Option A:</strong> Reserve stock at checkout with a TTL and sweep expired reservations using the same scheduled job.</li>
+    <li><strong>Option B:</strong> Accept the oversell and make automatic refund a first-class path in the webhook handler.</li>
+  </ul>
+  <p>Also: <code>_create_items</code> currently raises <code>HTTPException(422)</code> on failed deduction — inside a webhook handler that returns non-2xx to Paystack and triggers retries forever while the order stays stuck.</p>
+</div>
+
+<div class="blocker">
+  <h3>3. Nothing in the plan prevents paying a seller twice</h3>
+  <p>The escrow status enum is <code>HELD | RELEASE_PENDING | DISPUTED | RELEASED | REFUNDED</code>. There is no in-flight state. If the process crashes between calling Paystack’s transfer API and receiving <code>transfer.success</code>, the row still reads <code>RELEASE_PENDING</code> and the next job run initiates a second transfer.</p>
+  <p>Compounding this, APScheduler in a FastAPI lifespan runs in <strong>every uvicorn worker</strong>, so with more than one worker every release fires N times concurrently on day one.</p>
+  <p><strong>Required together:</strong></p>
+  <ol>
+    <li>A <code>RELEASING</code> / <code>TRANSFER_INITIATED</code> state</li>
+    <li>Row claiming via conditional update: <code>UPDATE escrow_holds SET status='RELEASING' WHERE id=:id AND status='RELEASE_PENDING' RETURNING id</code></li>
+    <li>A <strong>deterministic transfer reference</strong> derived from <code>escrow_hold.id</code> passed to Paystack’s <code>POST /transfer</code>, so a retry is rejected as a duplicate rather than paying again</li>
+  </ol>
+</div>
+
+<div class="blocker">
+  <h3>4. Chargebacks are absent, and the 7-day window doesn’t cover them</h3>
+  <p>Card chargebacks in Nigeria can land months after the transaction. If you release to the seller on day 7 and a chargeback arrives on day 45, Paystack debits your balance and you have no recourse against the seller.</p>
+  <p>Paystack emits <code>charge.dispute.create</code>, <code>charge.dispute.remind</code>, and <code>charge.dispute.resolve</code> — none appear in the plan. At minimum, handle those events, and consider a rolling reserve or the ability to withhold future payouts. There’s also no way to claw back after <code>RELEASED</code> — the plan says “handle via support,” which means “absorb the loss.”</p>
+</div>
+
+<h2>Paystack API details that are wrong or missing</h2>
+<p>These would each fail on first integration:</p>
+
+<table>
+  <thead>
+    <tr><th>Issue</th><th>Correction</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>charge.failed</code> does not exist</td>
+      <td>Paystack only sends webhooks for successful transactions. Remove from webhook events table. Detect failure via <code>GET /transaction/verify/{reference}</code> on frontend callback plus a sweep job for stale pending orders.</td>
+    </tr>
+    <tr>
+      <td><code>PAYSTACK_WEBHOOK_SECRET</code></td>
+      <td>Does not exist. Paystack signs with HMAC-SHA512 of the raw request body using your <strong>secret key</strong> in <code>x-paystack-signature</code>. Read raw body via <code>await request.body()</code> before JSON parsing; compare with <code>hmac.compare_digest</code>.</td>
+    </tr>
+    <tr>
+      <td><code>gateway_event_id</code> idempotency</td>
+      <td>Paystack webhook bodies are <code>{event, data}</code> with no top-level event ID. Use hash of raw body or composite <code>(event_type, data.id, data.status)</code>. Enforce idempotency at state transition with conditional updates, not event dedup alone.</td>
+    </tr>
+    <tr>
+      <td>Amounts in kobo</td>
+      <td>Plan never mentions minor units. Codebase uses <code>Numeric(12,2)</code> Decimal; HTTP layer uses <code>float</code>. Need <code>to_minor_units(Decimal) -&gt; int</code>. Webhook must compare verified <code>data.amount</code> and <code>data.currency</code> before marking PAID.</td>
+    </tr>
+    <tr>
+      <td>Transfers need OTP disabled</td>
+      <td>Programmatic transfers require disabling OTP on the Paystack account. Dashboard toggle + approval step; belongs in Phase 2 prerequisites alongside enabling Transfers product.</td>
+    </tr>
+    <tr>
+      <td><code>transfer.reversed</code> missing</td>
+      <td>Can arrive days after successful transfer; must move hold back out of RELEASED. Refunds emit pending/processing/processed/failed — plan handles only processed.</td>
+    </tr>
+    <tr>
+      <td>Manual admin bank verification</td>
+      <td>Use <code>GET /bank/resolve</code> (Paystack NUBAN resolution). Store resolved name, not seller-typed input.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Economics the model doesn’t capture</h2>
+<ul>
+  <li><strong>Paystack fees are nowhere.</strong> Card ~1.5% + ₦100 (waived under ₦2,500, capped ₦2,000); transfers ₦10–₦50. At 5% platform fee on ₦10,000 you collect ₦500 and pay ~₦260 in gateway costs.</li>
+  <li><strong>Refunds:</strong> Confirm whether processing fee is returned — historically it is not; every full refund is a direct loss.</li>
+  <li>Add <code>gateway_fee_amount</code> column (<code>charge.success</code> includes <code>fees</code>).</li>
+  <li>State rounding policy: <code>platform_fee + seller_net + gateway_fee == gross</code> in minor units.</li>
+  <li><code>platform_fee_amount</code> and <code>seller_net_amount</code> on both <code>payments</code> and <code>escrow_holds</code> — pick one authoritative source.</li>
+</ul>
+
+<h2>Data model corrections</h2>
+<ul>
+  <li><strong><code>payments.order_id</code> unique vs retries:</strong> Use partial unique index <code>WHERE status = 'PAID'</code> — retries allowed, double capture impossible.</li>
+  <li><strong>No ledger:</strong> Mutable status columns cannot answer “where is this money” after refunds, partial refunds, reversed transfers, disputes. Add append-only <code>ledger_entries</code> (order, direction, amount in minor units, account, reference).</li>
+  <li><strong>PCI/privacy:</strong> <code>payment_events.payload</code> stores customer email, IP, card BIN/last4 — needs retention policy; no card data beyond BIN/last4.</li>
+</ul>
+
+<h2>Architecture and infrastructure</h2>
+<ul>
+  <li><strong>Webhook route:</strong> Add to <code>PUBLIC_EXACT_PATHS</code> in <code>app/middleware/auth.py</code> — use exact path, not prefix (prefix would expose all future <code>/webhooks/*</code>).</li>
+  <li><strong>Transaction boundary:</strong> <code>get_db</code> commits at request end. Handler must not hold DB transaction open across Paystack verify HTTP call. Pattern: commit raw event first, return 200, process state transition separately and idempotently.</li>
+  <li><strong><code>httpx</code> not a dependency yet</strong> — codebase has no outbound HTTP client. Add in Phase 1 with timeout/retry policy.</li>
+  <li><strong>APScheduler + multi-worker:</strong> Job runs per uvicorn worker — needs distributed claiming, not in-process scheduler alone.</li>
+</ul>
+
+<h2>Frontend gaps</h2>
+<ul>
+  <li><strong>Order detail is a server component</strong> (<code>orders/[id]/page.tsx</code>) — “poll until PAID” needs client component + TanStack Query or payment-status island.</li>
+  <li><strong><code>clearCart()</code> timing:</strong> Currently runs immediately after order creation. With PAYMENT_PENDING, customer gets empty cart + unpaid order. Clear only on confirmed payment; add “resume payment” on pending order page.</li>
+  <li><strong>Public key duplication:</strong> Response includes <code>publicKey</code> while plan adds <code>NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY</code>. With <code>@paystack/inline-js</code> v2, <code>resumeTransaction(access_code)</code> needs no public key. Inline keeps PCI SAQ-A.</li>
+</ul>
+
+<h2>Sequencing</h2>
+<ul>
+  <li>Phase 2 hard-blocks checkout on active payout account, but Phase 3 is frontend checkout — shipping Phase 2 first kills checkout for all sellers with no payout account. Gate behind flag or move last.</li>
+  <li>Removing customer <code>POST /orders</code> must not happen until frontend migrates.</li>
+  <li>Gate placement inconsistent — block at <strong>publish</strong> (listing) not checkout for better UX.</li>
+  <li>Reconciliation in Phase 6 is too late — need daily Paystack vs <code>payments</code> comparison from day one of real money.</li>
+</ul>
+
+<h2>Smaller inconsistencies</h2>
+<ul>
+  <li>State diagram: <code>HELD → RELEASE_PENDING</code> vs <code>DELIVERED → RELEASE_PENDING: escrow_job</code> — pin to synchronous status transition on PATCH.</li>
+  <li>No expiry for PAYMENT_PENDING orders — same scheduler needs abandoned-checkout sweep.</li>
+  <li>Gateway-neutral naming: adding <code>provider varchar default 'paystack'</code> now is cheap; <code>/webhooks/paystack</code> route name is fine.</li>
+</ul>
+
+<h2>Test plan additions</h2>
+<ul>
+  <li>Signature verification rejects tampered body</li>
+  <li>Verified amount mismatch refuses PAID</li>
+  <li>Retried transfer with same reference does not double-pay</li>
+  <li>Two concurrent release job instances → exactly one transfer</li>
+  <li><code>transfer.reversed</code> correctly un-releases</li>
+  <li><code>charge.success</code> with no stock triggers refund, not 422 retry loop</li>
+</ul>
+
+<h2>Recommended next steps (before writing code)</h2>
+<ol>
+  <li>Resolve flow-of-funds with Paystack: platform-hold vs Connect subaccounts with manual settlement</li>
+  <li>Decide stock reservation strategy (TTL reserve vs auto-refund on oversell)</li>
+  <li>Add ledger to data model</li>
+  <li>Add double-payout prevention (RELEASING state + conditional claim + deterministic transfer reference)</li>
+  <li>Fix Paystack integration specifics (no charge.failed, secret-key signing, kobo amounts, transfer.reversed, dispute webhooks)</li>
+</ol>
+
+<p class="footer">
+  Generated from expert review of the Paystack Escrow Payment Flow implementation plan.<br />
+  Repositories: print (backend), print-web (frontend).
+</p>
+
+</body>
+</html>
